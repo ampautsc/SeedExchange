@@ -47,13 +47,13 @@ export function SubmitSeedOffer(
 
     // Update remaining quantities
     remainingQuantity -= quantityToFill;
-    request.quantity -= quantityToFill;
+    const updatedQuantity = request.quantity - quantityToFill;
 
     // Remove or update the request
-    if (request.quantity <= 0) {
+    if (updatedQuantity <= 0) {
       collections.removeOpenRequest(request.id);
     } else {
-      collections.updateOpenRequest(request);
+      collections.updateOpenRequest({ ...request, quantity: updatedQuantity });
     }
   }
 
@@ -110,11 +110,11 @@ export function SubmitSeedRequest(
       collections.addSeedFill(fill);
 
       // Update the offer
-      offer.quantity -= requestQuantity;
-      if (offer.quantity <= 0) {
+      const updatedQuantity = offer.quantity - requestQuantity;
+      if (updatedQuantity <= 0) {
         collections.removeOpenOffer(offer.id);
       } else {
-        collections.updateOpenOffer(offer);
+        collections.updateOpenOffer({ ...offer, quantity: updatedQuantity });
       }
 
       return { filled: true, fill };
