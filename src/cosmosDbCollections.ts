@@ -1,4 +1,4 @@
-import { CosmosClient, Container, Database } from '@azure/cosmos';
+import { CosmosClient, Container } from '@azure/cosmos';
 import { SeedExchange } from './types';
 import { ISeedExchangeCollections } from './ISeedExchangeCollections';
 import { CosmosDbConfig } from './cosmosDbConfig';
