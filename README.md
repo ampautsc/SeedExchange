@@ -189,7 +189,7 @@ Withdraws an open seed request or offer.
 The unified data model that tracks the complete lifecycle of a seed exchange:
 
 - `id: string` - Unique identifier
-- `plantId: string` - Plant identifier
+- `plantId: string` - Plant identifier (used as partition key in Cosmos DB)
 - `requestUserId: string | null` - User who made the request (null for open offers)
 - `offerUserId: string | null` - User who made the offer (null for open requests)
 - `quantity: number` - Number of packets
@@ -203,6 +203,67 @@ The unified data model that tracks the complete lifecycle of a seed exchange:
 - **Open Request**: `requestUserId` set, `offerUserId` null, `confirmationTime` null
 - **Open Offer**: `offerUserId` set, `requestUserId` null, `confirmationTime` null
 - **Confirmed Exchange**: Both `requestUserId` and `offerUserId` set, `confirmationTime` set
+
+## Implementation Details
+
+### Storage Abstraction
+
+The API uses the `ISeedExchangeCollections` interface to abstract storage operations, allowing seamless switching between in-memory and Cosmos DB storage:
+
+```typescript
+interface ISeedExchangeCollections {
+  getOpenRequestsByPlant(plantId: string): Promise<SeedExchange[]>;
+  getOpenOffersByPlant(plantId: string): Promise<SeedExchange[]>;
+  getConfirmedExchanges(): Promise<SeedExchange[]>;
+  getExchangesByUser(userId: string): Promise<SeedExchange[]>;
+  addExchange(exchange: SeedExchange): Promise<void>;
+  getExchange(id: string): Promise<SeedExchange | undefined>;
+  removeExchange(id: string): Promise<void>;
+  updateExchange(exchange: SeedExchange): Promise<void>;
+  getAllExchanges(): Promise<SeedExchange[]>;
+  clear(): Promise<void>;
+}
+```
+
+### Cosmos DB Design
+
+The Cosmos DB implementation is optimized for the seed exchange workload:
+
+1. **Partition Key**: Uses `plantId` as the partition key, enabling efficient queries for offers and requests by plant type
+2. **Indexing**: Automatic indexing on all paths for flexible query patterns
+3. **Data Serialization**: Properly handles Date objects by converting to/from ISO strings
+4. **Query Patterns**: Optimized SQL queries for common operations (open requests, open offers, confirmed exchanges)
+5. **Initialization**: Automatic database and container creation with proper schema
+
+### Async API
+
+All API functions are async and return Promises, supporting both in-memory and Cosmos DB storage:
+
+- `SubmitSeedOffer()` - Returns `Promise<SubmitSeedOfferResult>`
+- `SubmitSeedRequest()` - Returns `Promise<SubmitSeedRequestResult>`
+- `Withdraw()` - Returns `Promise<WithdrawResult>`
+
+## Examples
+
+### Basic Example (In-Memory)
+
+See `src/example.ts` for a complete demonstration using in-memory storage.
+
+### Cosmos DB Example
+
+See `src/cosmosDbExample.ts` for a complete demonstration using Azure Cosmos DB.
+
+To run the Cosmos DB example:
+
+```bash
+# Set up environment variables
+export COSMOS_DB_ENDPOINT="https://your-account.documents.azure.com:443/"
+export COSMOS_DB_KEY="your-key"
+
+# Build and run
+npm run build
+node dist/cosmosDbExample.js
+```
 
 ## License
 

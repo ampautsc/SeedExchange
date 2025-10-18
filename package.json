@@ -11,7 +11,10 @@
   "keywords": [
     "seed",
     "exchange",
-    "api"
+    "api",
+    "azure",
+    "cosmosdb",
+    "typescript"
   ],
   "author": "",
   "license": "ISC",
