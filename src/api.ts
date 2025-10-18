@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { AzureUserToken, SubmitSeedOfferResult, SubmitSeedRequestResult, SeedExchange, CancelResult } from './types';
+import { AzureUserToken, SubmitSeedOfferResult, SubmitSeedRequestResult, SeedExchange, WithdrawResult } from './types';
 import { SeedExchangeCollections } from './collections';
 
 /**
@@ -168,17 +168,17 @@ export function SubmitSeedRequest(
 }
 
 /**
- * Cancel an open seed request or offer
+ * Withdraw an open seed request or offer
  * @param authToken - Azure user authentication token
- * @param exchangeId - ID of the exchange to cancel
+ * @param exchangeId - ID of the exchange to withdraw
  * @param collections - Collection manager instance
- * @returns Result indicating if cancellation was successful
+ * @returns Result indicating if withdrawal was successful
  */
-export function CancelExchange(
+export function Withdraw(
   authToken: AzureUserToken,
   exchangeId: string,
   collections: SeedExchangeCollections
-): CancelResult {
+): WithdrawResult {
   const exchange = collections.getExchange(exchangeId);
 
   if (!exchange) {
@@ -187,7 +187,7 @@ export function CancelExchange(
 
   // Check if the exchange is open (not yet confirmed)
   if (exchange.confirmationTime !== null) {
-    // Cannot cancel a confirmed exchange
+    // Cannot withdraw a confirmed exchange
     return { success: false };
   }
 
@@ -203,5 +203,5 @@ export function CancelExchange(
   // Remove the exchange
   collections.removeExchange(exchangeId);
 
-  return { success: true, canceledExchange: exchange };
+  return { success: true, withdrawnExchange: exchange };
 }

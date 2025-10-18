@@ -1,13 +1,13 @@
 # SeedExchange
 Camp Monarch's Seed Exchange API
 
-A TypeScript-based API for managing seed exchanges between users. The API supports submitting seed offers and requests, with automatic matching and fulfillment, as well as the ability to cancel open requests or offers.
+A TypeScript-based API for managing seed exchanges between users. The API supports submitting seed offers and requests, with automatic matching and fulfillment, as well as the ability to withdraw open requests or offers.
 
 ## Features
 
 - **Submit Seed Offers**: Users can offer seed packets, which automatically fill pending requests
 - **Submit Seed Requests**: Users request seed packets (always 1 packet), which are filled from available offers
-- **Cancel Exchanges**: Users can cancel their own open requests or offers
+- **Withdraw Exchanges**: Users can withdraw their own open requests or offers
 - **FIFO Matching**: Requests and offers are matched in first-in-first-out order
 - **Azure Authentication**: Uses Azure user tokens to identify users
 - **Unified Data Model**: Single SeedExchange collection tracks the full lifecycle from request/offer to confirmation and delivery
@@ -33,7 +33,7 @@ npm test
 ## Usage
 
 ```typescript
-import { SubmitSeedOffer, SubmitSeedRequest, CancelExchange, collections } from 'seed-exchange-api';
+import { SubmitSeedOffer, SubmitSeedRequest, Withdraw, collections } from 'seed-exchange-api';
 
 // Define user authentication token
 const user = {
@@ -52,9 +52,9 @@ const requestResult = SubmitSeedRequest(user, 'carrot-456', collections);
 console.log('Request filled:', requestResult.filled);
 console.log('Exchange details:', requestResult.exchange);
 
-// Cancel an open request or offer
-const cancelResult = CancelExchange(user, requestResult.remainingRequest!.id, collections);
-console.log('Cancellation successful:', cancelResult.success);
+// Withdraw an open request or offer
+const withdrawResult = Withdraw(user, requestResult.remainingRequest!.id, collections);
+console.log('Withdrawal successful:', withdrawResult.success);
 ```
 
 ## API Reference
@@ -101,22 +101,22 @@ Submits a seed request to the exchange (always 1 packet).
 4. Records unfilled request as an open request if needed
 5. Does not fill from own offers
 
-### CancelExchange
+### Withdraw
 
-Cancels an open seed request or offer.
+Withdraws an open seed request or offer.
 
 **Parameters:**
 - `authToken: AzureUserToken` - Authentication token identifying the user
-- `exchangeId: string` - ID of the exchange to cancel
+- `exchangeId: string` - ID of the exchange to withdraw
 - `collections: SeedExchangeCollections` - Collection manager instance
 
-**Returns:** `CancelResult`
-- `success: boolean` - Whether cancellation was successful
-- `canceledExchange?: SeedExchange` - Details of canceled exchange
+**Returns:** `WithdrawResult`
+- `success: boolean` - Whether withdrawal was successful
+- `withdrawnExchange?: SeedExchange` - Details of withdrawn exchange
 
 **Behavior:**
 1. Verifies the exchange exists and is owned by the user
-2. Cannot cancel confirmed exchanges (only open requests/offers)
+2. Cannot withdraw confirmed exchanges (only open requests/offers)
 3. Removes the exchange from the collection
 
 ## Data Model

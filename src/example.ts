@@ -1,4 +1,4 @@
-import { SubmitSeedOffer, SubmitSeedRequest, CancelExchange, collections, AzureUserToken } from './index';
+import { SubmitSeedOffer, SubmitSeedRequest, Withdraw, collections, AzureUserToken } from './index';
 
 // Example: Demonstrating the Seed Exchange API
 
@@ -60,10 +60,10 @@ const aliceRequest = SubmitSeedRequest(alice, 'lettuce-green', collections);
 console.log(`   - Request filled: ${aliceRequest.filled}`);
 console.log(`   - Open request created: ${aliceRequest.remainingRequest?.id !== undefined}\n`);
 
-// Scenario 7: Alice cancels her lettuce request
-console.log('7. Alice cancels her lettuce request');
-const cancelResult = CancelExchange(alice, aliceRequest.remainingRequest!.id, collections);
-console.log(`   - Cancellation successful: ${cancelResult.success}\n`);
+// Scenario 7: Alice withdraws her lettuce request
+console.log('7. Alice withdraws her lettuce request');
+const withdrawResult = Withdraw(alice, aliceRequest.remainingRequest!.id, collections);
+console.log(`   - Withdrawal successful: ${withdrawResult.success}\n`);
 
 // Show final state
 console.log('=== Final State ===');

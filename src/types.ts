@@ -45,9 +45,9 @@ export interface SubmitSeedRequestResult {
 }
 
 /**
- * Result of canceling an open request or offer
+ * Result of withdrawing an open request or offer
  */
-export interface CancelResult {
+export interface WithdrawResult {
   success: boolean;
-  canceledExchange?: SeedExchange;
+  withdrawnExchange?: SeedExchange;
 }

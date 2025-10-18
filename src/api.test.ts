@@ -1,4 +1,4 @@
-import { SubmitSeedOffer, SubmitSeedRequest, CancelExchange } from './api';
+import { SubmitSeedOffer, SubmitSeedRequest, Withdraw } from './api';
 import { SeedExchangeCollections } from './collections';
 import { AzureUserToken } from './types';
 
@@ -247,64 +247,64 @@ describe('SeedExchange API', () => {
     });
   });
 
-  describe('CancelExchange', () => {
-    it('should cancel an open request', () => {
+  describe('Withdraw', () => {
+    it('should withdraw an open request', () => {
       const requestResult = SubmitSeedRequest(user1, 'tomato-123', collections);
       const exchangeId = requestResult.remainingRequest!.id;
 
-      const cancelResult = CancelExchange(user1, exchangeId, collections);
+      const withdrawResult = Withdraw(user1, exchangeId, collections);
 
-      expect(cancelResult.success).toBe(true);
-      expect(cancelResult.canceledExchange).toBeDefined();
-      expect(cancelResult.canceledExchange?.id).toBe(exchangeId);
+      expect(withdrawResult.success).toBe(true);
+      expect(withdrawResult.withdrawnExchange).toBeDefined();
+      expect(withdrawResult.withdrawnExchange?.id).toBe(exchangeId);
 
       const openRequests = collections.getOpenRequestsByPlant('tomato-123');
       expect(openRequests).toHaveLength(0);
     });
 
-    it('should cancel an open offer', () => {
+    it('should withdraw an open offer', () => {
       const offerResult = SubmitSeedOffer(user1, 'tomato-123', 3, collections);
       const exchangeId = offerResult.remainingOffer!.id;
 
-      const cancelResult = CancelExchange(user1, exchangeId, collections);
+      const withdrawResult = Withdraw(user1, exchangeId, collections);
 
-      expect(cancelResult.success).toBe(true);
-      expect(cancelResult.canceledExchange).toBeDefined();
+      expect(withdrawResult.success).toBe(true);
+      expect(withdrawResult.withdrawnExchange).toBeDefined();
 
       const openOffers = collections.getOpenOffersByPlant('tomato-123');
       expect(openOffers).toHaveLength(0);
     });
 
-    it('should not cancel a confirmed exchange', () => {
+    it('should not withdraw a confirmed exchange', () => {
       SubmitSeedRequest(user2, 'tomato-123', collections);
       const offerResult = SubmitSeedOffer(user1, 'tomato-123', 2, collections);
       const confirmedExchangeId = offerResult.filledExchanges[0].id;
 
-      const cancelResult = CancelExchange(user1, confirmedExchangeId, collections);
+      const withdrawResult = Withdraw(user1, confirmedExchangeId, collections);
 
-      expect(cancelResult.success).toBe(false);
+      expect(withdrawResult.success).toBe(false);
 
       const confirmedExchanges = collections.getConfirmedExchanges();
       expect(confirmedExchanges).toHaveLength(1);
     });
 
-    it('should not cancel another user\'s exchange', () => {
+    it('should not withdraw another user\'s exchange', () => {
       const requestResult = SubmitSeedRequest(user1, 'tomato-123', collections);
       const exchangeId = requestResult.remainingRequest!.id;
 
-      const cancelResult = CancelExchange(user2, exchangeId, collections);
+      const withdrawResult = Withdraw(user2, exchangeId, collections);
 
-      expect(cancelResult.success).toBe(false);
+      expect(withdrawResult.success).toBe(false);
 
       const openRequests = collections.getOpenRequestsByPlant('tomato-123');
       expect(openRequests).toHaveLength(1);
     });
 
     it('should return false for non-existent exchange', () => {
-      const cancelResult = CancelExchange(user1, 'non-existent-id', collections);
+      const withdrawResult = Withdraw(user1, 'non-existent-id', collections);
 
-      expect(cancelResult.success).toBe(false);
-      expect(cancelResult.canceledExchange).toBeUndefined();
+      expect(withdrawResult.success).toBe(false);
+      expect(withdrawResult.withdrawnExchange).toBeUndefined();
     });
   });
 
