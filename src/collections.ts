@@ -1,94 +1,87 @@
-import { OpenSeedRequest, OpenSeedOffer, SeedFill } from './types';
+import { SeedExchange } from './types';
 
 /**
- * In-memory collections for managing seed exchange data
+ * In-memory collection for managing seed exchange data
  */
 export class SeedExchangeCollections {
-  private openSeedRequests: Map<string, OpenSeedRequest> = new Map();
-  private openSeedOffers: Map<string, OpenSeedOffer> = new Map();
-  private seedFills: Map<string, SeedFill> = new Map();
+  private seedExchanges: Map<string, SeedExchange> = new Map();
 
   /**
    * Get all open seed requests for a specific plant
+   * (entries where requestUserId is set but offerUserId is null)
    */
-  getOpenRequestsByPlant(plantId: string): OpenSeedRequest[] {
-    return Array.from(this.openSeedRequests.values())
-      .filter(req => req.plantId === plantId)
-      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  getOpenRequestsByPlant(plantId: string): SeedExchange[] {
+    return Array.from(this.seedExchanges.values())
+      .filter(ex => ex.plantId === plantId && ex.requestUserId !== null && ex.offerUserId === null)
+      .sort((a, b) => (a.seedRequestTime?.getTime() || 0) - (b.seedRequestTime?.getTime() || 0));
   }
 
   /**
    * Get all open seed offers for a specific plant
+   * (entries where offerUserId is set but requestUserId is null)
    */
-  getOpenOffersByPlant(plantId: string): OpenSeedOffer[] {
-    return Array.from(this.openSeedOffers.values())
-      .filter(offer => offer.plantId === plantId)
-      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  getOpenOffersByPlant(plantId: string): SeedExchange[] {
+    return Array.from(this.seedExchanges.values())
+      .filter(ex => ex.plantId === plantId && ex.offerUserId !== null && ex.requestUserId === null)
+      .sort((a, b) => (a.seedOfferTime?.getTime() || 0) - (b.seedOfferTime?.getTime() || 0));
   }
 
   /**
-   * Add a new open seed request
+   * Get all confirmed exchanges (both requestUserId and offerUserId are set)
    */
-  addOpenRequest(request: OpenSeedRequest): void {
-    this.openSeedRequests.set(request.id, request);
+  getConfirmedExchanges(): SeedExchange[] {
+    return Array.from(this.seedExchanges.values())
+      .filter(ex => ex.requestUserId !== null && ex.offerUserId !== null);
   }
 
   /**
-   * Add a new open seed offer
+   * Get all exchanges for a specific user (as requester or offerer)
    */
-  addOpenOffer(offer: OpenSeedOffer): void {
-    this.openSeedOffers.set(offer.id, offer);
+  getExchangesByUser(userId: string): SeedExchange[] {
+    return Array.from(this.seedExchanges.values())
+      .filter(ex => ex.requestUserId === userId || ex.offerUserId === userId);
   }
 
   /**
-   * Remove an open seed request
+   * Add a new seed exchange entry
    */
-  removeOpenRequest(id: string): void {
-    this.openSeedRequests.delete(id);
+  addExchange(exchange: SeedExchange): void {
+    this.seedExchanges.set(exchange.id, exchange);
   }
 
   /**
-   * Remove an open seed offer
+   * Get a seed exchange by ID
    */
-  removeOpenOffer(id: string): void {
-    this.openSeedOffers.delete(id);
+  getExchange(id: string): SeedExchange | undefined {
+    return this.seedExchanges.get(id);
   }
 
   /**
-   * Update an open seed request
+   * Remove a seed exchange entry
    */
-  updateOpenRequest(request: OpenSeedRequest): void {
-    this.openSeedRequests.set(request.id, request);
+  removeExchange(id: string): void {
+    this.seedExchanges.delete(id);
   }
 
   /**
-   * Update an open seed offer
+   * Update a seed exchange entry
    */
-  updateOpenOffer(offer: OpenSeedOffer): void {
-    this.openSeedOffers.set(offer.id, offer);
+  updateExchange(exchange: SeedExchange): void {
+    this.seedExchanges.set(exchange.id, exchange);
   }
 
   /**
-   * Add a seed fill record
+   * Get all seed exchanges
    */
-  addSeedFill(fill: SeedFill): void {
-    this.seedFills.set(fill.id, fill);
-  }
-
-  /**
-   * Get all seed fills
-   */
-  getAllFills(): SeedFill[] {
-    return Array.from(this.seedFills.values());
+  getAllExchanges(): SeedExchange[] {
+    return Array.from(this.seedExchanges.values());
   }
 
   /**
    * Clear all collections (useful for testing)
    */
   clear(): void {
-    this.openSeedRequests.clear();
-    this.openSeedOffers.clear();
-    this.seedFills.clear();
+    this.seedExchanges.clear();
   }
 }
 

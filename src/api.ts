@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { AzureUserToken, SubmitSeedOfferResult, SubmitSeedRequestResult, OpenSeedOffer, OpenSeedRequest, SeedFill } from './types';
+import { AzureUserToken, SubmitSeedOfferResult, SubmitSeedRequestResult, SeedExchange, CancelResult } from './types';
 import { SeedExchangeCollections } from './collections';
 
 /**
@@ -8,7 +8,7 @@ import { SeedExchangeCollections } from './collections';
  * @param plantId - ID of the plant being offered
  * @param packetQuantity - Number of packets being offered
  * @param collections - Collection manager instance
- * @returns Result containing filled requests and any remaining offer
+ * @returns Result containing filled exchanges and any remaining offer
  */
 export function SubmitSeedOffer(
   authToken: AzureUserToken,
@@ -16,7 +16,7 @@ export function SubmitSeedOffer(
   packetQuantity: number,
   collections: SeedExchangeCollections
 ): SubmitSeedOfferResult {
-  const filledRequests: SeedFill[] = [];
+  const filledExchanges: SeedExchange[] = [];
   let remainingQuantity = packetQuantity;
   const timestamp = new Date();
 
@@ -28,49 +28,65 @@ export function SubmitSeedOffer(
     if (remainingQuantity <= 0) break;
 
     // Don't fill your own requests
-    if (request.userId === authToken.userId) continue;
+    if (request.requestUserId === authToken.userId) continue;
 
     const quantityToFill = Math.min(remainingQuantity, request.quantity);
 
-    // Create a fill record
-    const fill: SeedFill = {
-      id: uuidv4(),
-      plantId,
+    // Update the request to become a confirmed exchange
+    const confirmedExchange: SeedExchange = {
+      ...request,
       offerUserId: authToken.userId,
-      requestUserId: request.userId,
+      seedOfferTime: timestamp,
+      confirmationTime: timestamp,
       quantity: quantityToFill,
-      timestamp
+      shipTime: null,
+      receivedTime: null
     };
 
-    filledRequests.push(fill);
-    collections.addSeedFill(fill);
+    filledExchanges.push(confirmedExchange);
+    collections.updateExchange(confirmedExchange);
 
     // Update remaining quantities
     remainingQuantity -= quantityToFill;
     const updatedQuantity = request.quantity - quantityToFill;
 
-    // Remove or update the request
-    if (updatedQuantity <= 0) {
-      collections.removeOpenRequest(request.id);
-    } else {
-      collections.updateOpenRequest({ ...request, quantity: updatedQuantity });
+    // If request is partially filled, create a new request for the remainder
+    if (updatedQuantity > 0) {
+      const remainderRequest: SeedExchange = {
+        id: uuidv4(),
+        plantId: request.plantId,
+        requestUserId: request.requestUserId,
+        offerUserId: null,
+        quantity: updatedQuantity,
+        seedRequestTime: request.seedRequestTime,
+        seedOfferTime: null,
+        confirmationTime: null,
+        shipTime: null,
+        receivedTime: null
+      };
+      collections.addExchange(remainderRequest);
     }
   }
 
-  // Record remaining quantity in OpenSeedOffer collection if any
-  let remainingOffer: OpenSeedOffer | undefined;
+  // Record remaining quantity as an open offer if any
+  let remainingOffer: SeedExchange | undefined;
   if (remainingQuantity > 0) {
     remainingOffer = {
       id: uuidv4(),
       plantId,
-      userId: authToken.userId,
+      requestUserId: null,
+      offerUserId: authToken.userId,
       quantity: remainingQuantity,
-      timestamp
+      seedRequestTime: null,
+      seedOfferTime: timestamp,
+      confirmationTime: null,
+      shipTime: null,
+      receivedTime: null
     };
-    collections.addOpenOffer(remainingOffer);
+    collections.addExchange(remainingOffer);
   }
 
-  return { filledRequests, remainingOffer };
+  return { filledExchanges, remainingOffer };
 }
 
 /**
@@ -94,42 +110,98 @@ export function SubmitSeedRequest(
   // Try to fill from the first available offer
   for (const offer of openOffers) {
     // Don't fill from your own offers
-    if (offer.userId === authToken.userId) continue;
+    if (offer.offerUserId === authToken.userId) continue;
 
     if (offer.quantity >= requestQuantity) {
-      // Create a fill record
-      const fill: SeedFill = {
-        id: uuidv4(),
-        plantId,
-        offerUserId: offer.userId,
+      // Update the offer to become a confirmed exchange
+      const confirmedExchange: SeedExchange = {
+        ...offer,
         requestUserId: authToken.userId,
+        seedRequestTime: timestamp,
+        confirmationTime: timestamp,
         quantity: requestQuantity,
-        timestamp
+        shipTime: null,
+        receivedTime: null
       };
 
-      collections.addSeedFill(fill);
+      collections.updateExchange(confirmedExchange);
 
-      // Update the offer
+      // Update the offer quantity
       const updatedQuantity = offer.quantity - requestQuantity;
-      if (updatedQuantity <= 0) {
-        collections.removeOpenOffer(offer.id);
-      } else {
-        collections.updateOpenOffer({ ...offer, quantity: updatedQuantity });
+      if (updatedQuantity > 0) {
+        // Create a new offer for the remainder
+        const remainderOffer: SeedExchange = {
+          id: uuidv4(),
+          plantId: offer.plantId,
+          requestUserId: null,
+          offerUserId: offer.offerUserId,
+          quantity: updatedQuantity,
+          seedRequestTime: null,
+          seedOfferTime: offer.seedOfferTime,
+          confirmationTime: null,
+          shipTime: null,
+          receivedTime: null
+        };
+        collections.addExchange(remainderOffer);
       }
 
-      return { filled: true, fill };
+      return { filled: true, exchange: confirmedExchange };
     }
   }
 
   // No offer found, create an open request
-  const remainingRequest: OpenSeedRequest = {
+  const remainingRequest: SeedExchange = {
     id: uuidv4(),
     plantId,
-    userId: authToken.userId,
+    requestUserId: authToken.userId,
+    offerUserId: null,
     quantity: requestQuantity,
-    timestamp
+    seedRequestTime: timestamp,
+    seedOfferTime: null,
+    confirmationTime: null,
+    shipTime: null,
+    receivedTime: null
   };
-  collections.addOpenRequest(remainingRequest);
+  collections.addExchange(remainingRequest);
 
   return { filled: false, remainingRequest };
+}
+
+/**
+ * Cancel an open seed request or offer
+ * @param authToken - Azure user authentication token
+ * @param exchangeId - ID of the exchange to cancel
+ * @param collections - Collection manager instance
+ * @returns Result indicating if cancellation was successful
+ */
+export function CancelExchange(
+  authToken: AzureUserToken,
+  exchangeId: string,
+  collections: SeedExchangeCollections
+): CancelResult {
+  const exchange = collections.getExchange(exchangeId);
+
+  if (!exchange) {
+    return { success: false };
+  }
+
+  // Check if the exchange is open (not yet confirmed)
+  if (exchange.confirmationTime !== null) {
+    // Cannot cancel a confirmed exchange
+    return { success: false };
+  }
+
+  // Check if the user owns this request or offer
+  const isOwner = 
+    (exchange.requestUserId === authToken.userId && exchange.offerUserId === null) ||
+    (exchange.offerUserId === authToken.userId && exchange.requestUserId === null);
+
+  if (!isOwner) {
+    return { success: false };
+  }
+
+  // Remove the exchange
+  collections.removeExchange(exchangeId);
+
+  return { success: true, canceledExchange: exchange };
 }

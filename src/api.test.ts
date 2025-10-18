@@ -1,4 +1,4 @@
-import { SubmitSeedOffer, SubmitSeedRequest } from './api';
+import { SubmitSeedOffer, SubmitSeedRequest, CancelExchange } from './api';
 import { SeedExchangeCollections } from './collections';
 import { AzureUserToken } from './types';
 
@@ -16,14 +16,16 @@ describe('SeedExchange API', () => {
   });
 
   describe('SubmitSeedOffer', () => {
-    it('should add an offer to OpenSeedOffer when no requests exist', () => {
+    it('should add an offer to the collection when no requests exist', () => {
       const result = SubmitSeedOffer(user1, 'tomato-123', 5, collections);
 
-      expect(result.filledRequests).toHaveLength(0);
+      expect(result.filledExchanges).toHaveLength(0);
       expect(result.remainingOffer).toBeDefined();
       expect(result.remainingOffer?.plantId).toBe('tomato-123');
       expect(result.remainingOffer?.quantity).toBe(5);
-      expect(result.remainingOffer?.userId).toBe('user-1');
+      expect(result.remainingOffer?.offerUserId).toBe('user-1');
+      expect(result.remainingOffer?.requestUserId).toBeNull();
+      expect(result.remainingOffer?.seedOfferTime).toBeDefined();
     });
 
     it('should fill one request and create offer for remainder', () => {
@@ -33,14 +35,15 @@ describe('SeedExchange API', () => {
       // User 1 submits an offer with 5 packets
       const result = SubmitSeedOffer(user1, 'tomato-123', 5, collections);
 
-      expect(result.filledRequests).toHaveLength(1);
-      expect(result.filledRequests[0].offerUserId).toBe('user-1');
-      expect(result.filledRequests[0].requestUserId).toBe('user-2');
-      expect(result.filledRequests[0].quantity).toBe(1);
+      expect(result.filledExchanges).toHaveLength(1);
+      expect(result.filledExchanges[0].offerUserId).toBe('user-1');
+      expect(result.filledExchanges[0].requestUserId).toBe('user-2');
+      expect(result.filledExchanges[0].quantity).toBe(1);
+      expect(result.filledExchanges[0].confirmationTime).toBeDefined();
       expect(result.remainingOffer).toBeDefined();
       expect(result.remainingOffer?.quantity).toBe(4);
 
-      // Check that the request was removed
+      // Check that the request was converted to a confirmed exchange
       const openRequests = collections.getOpenRequestsByPlant('tomato-123');
       expect(openRequests).toHaveLength(0);
     });
@@ -54,16 +57,16 @@ describe('SeedExchange API', () => {
       // User 1's offer should fill user 2 and user 3 (not their own)
       const result = SubmitSeedOffer(user1, 'tomato-123', 3, collections);
 
-      expect(result.filledRequests).toHaveLength(2);
-      expect(result.filledRequests[0].requestUserId).toBe('user-2');
-      expect(result.filledRequests[1].requestUserId).toBe('user-3');
+      expect(result.filledExchanges).toHaveLength(2);
+      expect(result.filledExchanges[0].requestUserId).toBe('user-2');
+      expect(result.filledExchanges[1].requestUserId).toBe('user-3');
       expect(result.remainingOffer).toBeDefined();
       expect(result.remainingOffer?.quantity).toBe(1);
 
       // User 1's request should still be open
       const openRequests = collections.getOpenRequestsByPlant('tomato-123');
       expect(openRequests).toHaveLength(1);
-      expect(openRequests[0].userId).toBe('user-1');
+      expect(openRequests[0].requestUserId).toBe('user-1');
     });
 
     it('should fill all requests exactly with no remainder', () => {
@@ -72,7 +75,7 @@ describe('SeedExchange API', () => {
 
       const result = SubmitSeedOffer(user1, 'tomato-123', 2, collections);
 
-      expect(result.filledRequests).toHaveLength(2);
+      expect(result.filledExchanges).toHaveLength(2);
       expect(result.remainingOffer).toBeUndefined();
 
       const openRequests = collections.getOpenRequestsByPlant('tomato-123');
@@ -84,7 +87,7 @@ describe('SeedExchange API', () => {
 
       const result = SubmitSeedOffer(user1, 'tomato-123', 3, collections);
 
-      expect(result.filledRequests).toHaveLength(0);
+      expect(result.filledExchanges).toHaveLength(0);
       expect(result.remainingOffer?.quantity).toBe(3);
 
       const openRequests = collections.getOpenRequestsByPlant('tomato-123');
@@ -96,7 +99,7 @@ describe('SeedExchange API', () => {
 
       const result = SubmitSeedOffer(user1, 'tomato-123', 3, collections);
 
-      expect(result.filledRequests).toHaveLength(0);
+      expect(result.filledExchanges).toHaveLength(0);
       expect(result.remainingOffer?.quantity).toBe(3);
 
       const openRequestsTomato = collections.getOpenRequestsByPlant('tomato-123');
@@ -107,15 +110,17 @@ describe('SeedExchange API', () => {
   });
 
   describe('SubmitSeedRequest', () => {
-    it('should add request to OpenSeedRequest when no offers exist', () => {
+    it('should add request to the collection when no offers exist', () => {
       const result = SubmitSeedRequest(user1, 'tomato-123', collections);
 
       expect(result.filled).toBe(false);
-      expect(result.fill).toBeUndefined();
+      expect(result.exchange).toBeUndefined();
       expect(result.remainingRequest).toBeDefined();
       expect(result.remainingRequest?.plantId).toBe('tomato-123');
       expect(result.remainingRequest?.quantity).toBe(1);
-      expect(result.remainingRequest?.userId).toBe('user-1');
+      expect(result.remainingRequest?.requestUserId).toBe('user-1');
+      expect(result.remainingRequest?.offerUserId).toBeNull();
+      expect(result.remainingRequest?.seedRequestTime).toBeDefined();
     });
 
     it('should fill request from existing offer', () => {
@@ -126,13 +131,14 @@ describe('SeedExchange API', () => {
       const result = SubmitSeedRequest(user2, 'tomato-123', collections);
 
       expect(result.filled).toBe(true);
-      expect(result.fill).toBeDefined();
-      expect(result.fill?.offerUserId).toBe('user-1');
-      expect(result.fill?.requestUserId).toBe('user-2');
-      expect(result.fill?.quantity).toBe(1);
+      expect(result.exchange).toBeDefined();
+      expect(result.exchange?.offerUserId).toBe('user-1');
+      expect(result.exchange?.requestUserId).toBe('user-2');
+      expect(result.exchange?.quantity).toBe(1);
+      expect(result.exchange?.confirmationTime).toBeDefined();
       expect(result.remainingRequest).toBeUndefined();
 
-      // Check that the offer was updated
+      // Check that the offer was updated (split into remainder)
       const openOffers = collections.getOpenOffersByPlant('tomato-123');
       expect(openOffers).toHaveLength(1);
       expect(openOffers[0].quantity).toBe(4);
@@ -147,7 +153,7 @@ describe('SeedExchange API', () => {
 
       expect(result.filled).toBe(true);
 
-      // Check that the offer was removed
+      // Check that the offer was removed (no remainder)
       const openOffers = collections.getOpenOffersByPlant('tomato-123');
       expect(openOffers).toHaveLength(0);
     });
@@ -161,15 +167,20 @@ describe('SeedExchange API', () => {
       const result = SubmitSeedRequest(user3, 'tomato-123', collections);
 
       expect(result.filled).toBe(true);
-      expect(result.fill?.offerUserId).toBe('user-1');
+      expect(result.exchange?.offerUserId).toBe('user-1');
 
-      // Check that the first offer was updated
+      // Check that the offers were updated
       const openOffers = collections.getOpenOffersByPlant('tomato-123');
       expect(openOffers).toHaveLength(2);
-      expect(openOffers[0].userId).toBe('user-1');
-      expect(openOffers[0].quantity).toBe(2);
-      expect(openOffers[1].userId).toBe('user-2');
-      expect(openOffers[1].quantity).toBe(3);
+      
+      // Find user1 and user2 offers
+      const user1Offer = openOffers.find(o => o.offerUserId === 'user-1');
+      const user2Offer = openOffers.find(o => o.offerUserId === 'user-2');
+      
+      expect(user1Offer).toBeDefined();
+      expect(user1Offer?.quantity).toBe(2);
+      expect(user2Offer).toBeDefined();
+      expect(user2Offer?.quantity).toBe(3);
     });
 
     it('should not fill from own offers', () => {
@@ -201,22 +212,22 @@ describe('SeedExchange API', () => {
     });
   });
 
-  describe('SeedFill collection', () => {
-    it('should record all fills in SeedFill collection', () => {
+  describe('Confirmed Exchanges', () => {
+    it('should record all confirmed exchanges in the collection', () => {
       SubmitSeedRequest(user2, 'tomato-123', collections);
       SubmitSeedRequest(user3, 'tomato-123', collections);
 
       SubmitSeedOffer(user1, 'tomato-123', 5, collections);
 
-      const fills = collections.getAllFills();
-      expect(fills).toHaveLength(2);
-      expect(fills[0].offerUserId).toBe('user-1');
-      expect(fills[0].requestUserId).toBe('user-2');
-      expect(fills[1].offerUserId).toBe('user-1');
-      expect(fills[1].requestUserId).toBe('user-3');
+      const confirmedExchanges = collections.getConfirmedExchanges();
+      expect(confirmedExchanges).toHaveLength(2);
+      expect(confirmedExchanges[0].offerUserId).toBe('user-1');
+      expect(confirmedExchanges[0].requestUserId).toBe('user-2');
+      expect(confirmedExchanges[1].offerUserId).toBe('user-1');
+      expect(confirmedExchanges[1].requestUserId).toBe('user-3');
     });
 
-    it('should record fills from both offer and request submissions', () => {
+    it('should record exchanges from both offer and request submissions', () => {
       // User 1 submits offer
       SubmitSeedOffer(user1, 'tomato-123', 3, collections);
 
@@ -229,10 +240,71 @@ describe('SeedExchange API', () => {
       // User 1 submits offer (fills request)
       SubmitSeedOffer(user1, 'carrot-456', 2, collections);
 
-      const fills = collections.getAllFills();
-      expect(fills).toHaveLength(2);
-      expect(fills[0].plantId).toBe('tomato-123');
-      expect(fills[1].plantId).toBe('carrot-456');
+      const confirmedExchanges = collections.getConfirmedExchanges();
+      expect(confirmedExchanges).toHaveLength(2);
+      expect(confirmedExchanges[0].plantId).toBe('tomato-123');
+      expect(confirmedExchanges[1].plantId).toBe('carrot-456');
+    });
+  });
+
+  describe('CancelExchange', () => {
+    it('should cancel an open request', () => {
+      const requestResult = SubmitSeedRequest(user1, 'tomato-123', collections);
+      const exchangeId = requestResult.remainingRequest!.id;
+
+      const cancelResult = CancelExchange(user1, exchangeId, collections);
+
+      expect(cancelResult.success).toBe(true);
+      expect(cancelResult.canceledExchange).toBeDefined();
+      expect(cancelResult.canceledExchange?.id).toBe(exchangeId);
+
+      const openRequests = collections.getOpenRequestsByPlant('tomato-123');
+      expect(openRequests).toHaveLength(0);
+    });
+
+    it('should cancel an open offer', () => {
+      const offerResult = SubmitSeedOffer(user1, 'tomato-123', 3, collections);
+      const exchangeId = offerResult.remainingOffer!.id;
+
+      const cancelResult = CancelExchange(user1, exchangeId, collections);
+
+      expect(cancelResult.success).toBe(true);
+      expect(cancelResult.canceledExchange).toBeDefined();
+
+      const openOffers = collections.getOpenOffersByPlant('tomato-123');
+      expect(openOffers).toHaveLength(0);
+    });
+
+    it('should not cancel a confirmed exchange', () => {
+      SubmitSeedRequest(user2, 'tomato-123', collections);
+      const offerResult = SubmitSeedOffer(user1, 'tomato-123', 2, collections);
+      const confirmedExchangeId = offerResult.filledExchanges[0].id;
+
+      const cancelResult = CancelExchange(user1, confirmedExchangeId, collections);
+
+      expect(cancelResult.success).toBe(false);
+
+      const confirmedExchanges = collections.getConfirmedExchanges();
+      expect(confirmedExchanges).toHaveLength(1);
+    });
+
+    it('should not cancel another user\'s exchange', () => {
+      const requestResult = SubmitSeedRequest(user1, 'tomato-123', collections);
+      const exchangeId = requestResult.remainingRequest!.id;
+
+      const cancelResult = CancelExchange(user2, exchangeId, collections);
+
+      expect(cancelResult.success).toBe(false);
+
+      const openRequests = collections.getOpenRequestsByPlant('tomato-123');
+      expect(openRequests).toHaveLength(1);
+    });
+
+    it('should return false for non-existent exchange', () => {
+      const cancelResult = CancelExchange(user1, 'non-existent-id', collections);
+
+      expect(cancelResult.success).toBe(false);
+      expect(cancelResult.canceledExchange).toBeUndefined();
     });
   });
 
@@ -252,8 +324,8 @@ describe('SeedExchange API', () => {
       const result2 = SubmitSeedRequest(user1, 'carrot-456', collections);
       expect(result2.filled).toBe(true);
 
-      const fills = collections.getAllFills();
-      expect(fills).toHaveLength(2);
+      const confirmedExchanges = collections.getConfirmedExchanges();
+      expect(confirmedExchanges).toHaveLength(2);
 
       const openOffersTomato = collections.getOpenOffersByPlant('tomato-123');
       expect(openOffersTomato).toHaveLength(1);

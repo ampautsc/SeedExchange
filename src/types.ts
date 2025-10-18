@@ -8,45 +8,31 @@ export interface AzureUserToken {
 }
 
 /**
- * Represents an open seed request
+ * Represents a seed exchange entry that tracks the lifecycle of a seed exchange.
+ * An entry can be:
+ * - An open request (requestUserId set, offerUserId null)
+ * - An open offer (offerUserId set, requestUserId null)
+ * - A matched/confirmed exchange (both requestUserId and offerUserId set)
  */
-export interface OpenSeedRequest {
+export interface SeedExchange {
   id: string;
   plantId: string;
-  userId: string;
-  quantity: number; // Always 1 packet per request
-  timestamp: Date;
-}
-
-/**
- * Represents an open seed offer
- */
-export interface OpenSeedOffer {
-  id: string;
-  plantId: string;
-  userId: string;
-  quantity: number; // Number of packets available
-  timestamp: Date;
-}
-
-/**
- * Represents a completed seed fill (match between offer and request)
- */
-export interface SeedFill {
-  id: string;
-  plantId: string;
-  offerUserId: string;
-  requestUserId: string;
+  requestUserId: string | null;
+  offerUserId: string | null;
   quantity: number;
-  timestamp: Date;
+  seedRequestTime: Date | null;
+  seedOfferTime: Date | null;
+  confirmationTime: Date | null;
+  shipTime: Date | null;
+  receivedTime: Date | null;
 }
 
 /**
  * Result of submitting a seed offer
  */
 export interface SubmitSeedOfferResult {
-  filledRequests: SeedFill[];
-  remainingOffer?: OpenSeedOffer;
+  filledExchanges: SeedExchange[];
+  remainingOffer?: SeedExchange;
 }
 
 /**
@@ -54,6 +40,14 @@ export interface SubmitSeedOfferResult {
  */
 export interface SubmitSeedRequestResult {
   filled: boolean;
-  fill?: SeedFill;
-  remainingRequest?: OpenSeedRequest;
+  exchange?: SeedExchange;
+  remainingRequest?: SeedExchange;
+}
+
+/**
+ * Result of canceling an open request or offer
+ */
+export interface CancelResult {
+  success: boolean;
+  canceledExchange?: SeedExchange;
 }
