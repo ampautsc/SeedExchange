@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { AzureUserToken, SubmitSeedOfferResult, SubmitSeedRequestResult, SeedExchange, WithdrawResult } from './types';
-import { SeedExchangeCollections } from './collections';
+import { ISeedExchangeCollections } from './ISeedExchangeCollections';
 
 /**
  * Submit a seed offer to the exchange
@@ -10,18 +10,18 @@ import { SeedExchangeCollections } from './collections';
  * @param collections - Collection manager instance
  * @returns Result containing filled exchanges and any remaining offer
  */
-export function SubmitSeedOffer(
+export async function SubmitSeedOffer(
   authToken: AzureUserToken,
   plantId: string,
   packetQuantity: number,
-  collections: SeedExchangeCollections
-): SubmitSeedOfferResult {
+  collections: ISeedExchangeCollections
+): Promise<SubmitSeedOfferResult> {
   const filledExchanges: SeedExchange[] = [];
   let remainingQuantity = packetQuantity;
   const timestamp = new Date();
 
   // Get all open requests for this plant, sorted by timestamp (FIFO)
-  const openRequests = collections.getOpenRequestsByPlant(plantId);
+  const openRequests = await collections.getOpenRequestsByPlant(plantId);
 
   // Fill as many requests as possible
   for (const request of openRequests) {
@@ -44,7 +44,7 @@ export function SubmitSeedOffer(
     };
 
     filledExchanges.push(confirmedExchange);
-    collections.updateExchange(confirmedExchange);
+    await collections.updateExchange(confirmedExchange);
 
     // Update remaining quantities
     remainingQuantity -= quantityToFill;
@@ -64,7 +64,7 @@ export function SubmitSeedOffer(
         shipTime: null,
         receivedTime: null
       };
-      collections.addExchange(remainderRequest);
+      await collections.addExchange(remainderRequest);
     }
   }
 
@@ -83,7 +83,7 @@ export function SubmitSeedOffer(
       shipTime: null,
       receivedTime: null
     };
-    collections.addExchange(remainingOffer);
+    await collections.addExchange(remainingOffer);
   }
 
   return { filledExchanges, remainingOffer };
@@ -96,16 +96,16 @@ export function SubmitSeedOffer(
  * @param collections - Collection manager instance
  * @returns Result indicating if request was filled or remains open
  */
-export function SubmitSeedRequest(
+export async function SubmitSeedRequest(
   authToken: AzureUserToken,
   plantId: string,
-  collections: SeedExchangeCollections
-): SubmitSeedRequestResult {
+  collections: ISeedExchangeCollections
+): Promise<SubmitSeedRequestResult> {
   const timestamp = new Date();
   const requestQuantity = 1; // Always one packet per request
 
   // Get all open offers for this plant, sorted by timestamp (FIFO)
-  const openOffers = collections.getOpenOffersByPlant(plantId);
+  const openOffers = await collections.getOpenOffersByPlant(plantId);
 
   // Try to fill from the first available offer
   for (const offer of openOffers) {
@@ -124,7 +124,7 @@ export function SubmitSeedRequest(
         receivedTime: null
       };
 
-      collections.updateExchange(confirmedExchange);
+      await collections.updateExchange(confirmedExchange);
 
       // Update the offer quantity
       const updatedQuantity = offer.quantity - requestQuantity;
@@ -142,7 +142,7 @@ export function SubmitSeedRequest(
           shipTime: null,
           receivedTime: null
         };
-        collections.addExchange(remainderOffer);
+        await collections.addExchange(remainderOffer);
       }
 
       return { filled: true, exchange: confirmedExchange };
@@ -162,7 +162,7 @@ export function SubmitSeedRequest(
     shipTime: null,
     receivedTime: null
   };
-  collections.addExchange(remainingRequest);
+  await collections.addExchange(remainingRequest);
 
   return { filled: false, remainingRequest };
 }
@@ -174,12 +174,12 @@ export function SubmitSeedRequest(
  * @param collections - Collection manager instance
  * @returns Result indicating if withdrawal was successful
  */
-export function Withdraw(
+export async function Withdraw(
   authToken: AzureUserToken,
   exchangeId: string,
-  collections: SeedExchangeCollections
-): WithdrawResult {
-  const exchange = collections.getExchange(exchangeId);
+  collections: ISeedExchangeCollections
+): Promise<WithdrawResult> {
+  const exchange = await collections.getExchange(exchangeId);
 
   if (!exchange) {
     return { success: false };
@@ -201,7 +201,7 @@ export function Withdraw(
   }
 
   // Remove the exchange
-  collections.removeExchange(exchangeId);
+  await collections.removeExchange(exchangeId);
 
   return { success: true, withdrawnExchange: exchange };
 }
