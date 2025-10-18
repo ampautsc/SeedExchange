@@ -8,10 +8,15 @@
     "test": "jest",
     "lint": "eslint src/**/*.ts"
   },
-  "keywords": ["seed", "exchange", "api"],
+  "keywords": [
+    "seed",
+    "exchange",
+    "api"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@azure/cosmos": "^4.6.0",
     "uuid": "^9.0.0"
   },
   "devDependencies": {

@@ -1,16 +1,17 @@
 import { SeedExchange } from './types';
+import { ISeedExchangeCollections } from './ISeedExchangeCollections';
 
 /**
  * In-memory collection for managing seed exchange data
  */
-export class SeedExchangeCollections {
+export class SeedExchangeCollections implements ISeedExchangeCollections {
   private seedExchanges: Map<string, SeedExchange> = new Map();
 
   /**
    * Get all open seed requests for a specific plant
    * (entries where requestUserId is set but offerUserId is null)
    */
-  getOpenRequestsByPlant(plantId: string): SeedExchange[] {
+  async getOpenRequestsByPlant(plantId: string): Promise<SeedExchange[]> {
     return Array.from(this.seedExchanges.values())
       .filter(ex => ex.plantId === plantId && ex.requestUserId !== null && ex.offerUserId === null)
       .sort((a, b) => (a.seedRequestTime?.getTime() || 0) - (b.seedRequestTime?.getTime() || 0));
@@ -20,7 +21,7 @@ export class SeedExchangeCollections {
    * Get all open seed offers for a specific plant
    * (entries where offerUserId is set but requestUserId is null)
    */
-  getOpenOffersByPlant(plantId: string): SeedExchange[] {
+  async getOpenOffersByPlant(plantId: string): Promise<SeedExchange[]> {
     return Array.from(this.seedExchanges.values())
       .filter(ex => ex.plantId === plantId && ex.offerUserId !== null && ex.requestUserId === null)
       .sort((a, b) => (a.seedOfferTime?.getTime() || 0) - (b.seedOfferTime?.getTime() || 0));
@@ -29,7 +30,7 @@ export class SeedExchangeCollections {
   /**
    * Get all confirmed exchanges (both requestUserId and offerUserId are set)
    */
-  getConfirmedExchanges(): SeedExchange[] {
+  async getConfirmedExchanges(): Promise<SeedExchange[]> {
     return Array.from(this.seedExchanges.values())
       .filter(ex => ex.requestUserId !== null && ex.offerUserId !== null);
   }
@@ -37,7 +38,7 @@ export class SeedExchangeCollections {
   /**
    * Get all exchanges for a specific user (as requester or offerer)
    */
-  getExchangesByUser(userId: string): SeedExchange[] {
+  async getExchangesByUser(userId: string): Promise<SeedExchange[]> {
     return Array.from(this.seedExchanges.values())
       .filter(ex => ex.requestUserId === userId || ex.offerUserId === userId);
   }
@@ -45,42 +46,42 @@ export class SeedExchangeCollections {
   /**
    * Add a new seed exchange entry
    */
-  addExchange(exchange: SeedExchange): void {
+  async addExchange(exchange: SeedExchange): Promise<void> {
     this.seedExchanges.set(exchange.id, exchange);
   }
 
   /**
    * Get a seed exchange by ID
    */
-  getExchange(id: string): SeedExchange | undefined {
+  async getExchange(id: string): Promise<SeedExchange | undefined> {
     return this.seedExchanges.get(id);
   }
 
   /**
    * Remove a seed exchange entry
    */
-  removeExchange(id: string): void {
+  async removeExchange(id: string): Promise<void> {
     this.seedExchanges.delete(id);
   }
 
   /**
    * Update a seed exchange entry
    */
-  updateExchange(exchange: SeedExchange): void {
+  async updateExchange(exchange: SeedExchange): Promise<void> {
     this.seedExchanges.set(exchange.id, exchange);
   }
 
   /**
    * Get all seed exchanges
    */
-  getAllExchanges(): SeedExchange[] {
+  async getAllExchanges(): Promise<SeedExchange[]> {
     return Array.from(this.seedExchanges.values());
   }
 
   /**
    * Clear all collections (useful for testing)
    */
-  clear(): void {
+  async clear(): Promise<void> {
     this.seedExchanges.clear();
   }
 }
