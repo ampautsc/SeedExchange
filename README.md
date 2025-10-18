@@ -27,9 +27,29 @@ npm run build
 
 ## Test
 
+Run all tests (unit tests and end-to-end tests):
+
 ```bash
 npm test
 ```
+
+Run tests with coverage:
+
+```bash
+npm test -- --coverage
+```
+
+The test suite includes:
+- **Unit tests** (`src/api.test.ts`): Comprehensive tests for individual API operations
+- **End-to-end tests** (`src/e2e.test.ts`): Complete workflow validation including multi-user scenarios, FIFO ordering, withdrawals, and edge cases
+
+### Continuous Integration
+
+The repository includes a GitHub Actions workflow (`.github/workflows/test.yml`) that automatically:
+- Runs on all pushes and pull requests to main/master branches
+- Tests on Node.js 18.x and 20.x
+- Executes linting, building, and all tests with coverage reporting
+- Can be manually triggered via workflow_dispatch
 
 ## Storage Options
 
