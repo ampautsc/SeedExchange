@@ -210,6 +210,20 @@ if (result.status === 'healthy') {
 **Via Command Line:**
 
 ```bash
+# Using npm script (recommended)
+npm run health-check
+
+# Or manually after building
+npm run build
+node dist/healthCheckCli.js
+
+# With Cosmos DB
+COSMOS_DB_ENDPOINT=https://... COSMOS_DB_KEY=... npm run health-check
+```
+
+**Programmatically:**
+
+```bash
 npm run build
 node -e "
 const { performHealthCheck, formatHealthCheckResult } = require('./dist/healthCheck');

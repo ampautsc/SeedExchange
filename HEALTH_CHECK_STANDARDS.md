@@ -119,22 +119,30 @@ The repository includes a GitHub Action (`.github/workflows/health-check.yml`) t
 
 To run a manual health check:
 
+**Using npm script (recommended):**
+
+```bash
+npm run health-check
+```
+
+**With Cosmos DB:**
+
+```bash
+export COSMOS_DB_ENDPOINT="https://your-account.documents.azure.com:443/"
+export COSMOS_DB_KEY="your-key"
+npm run health-check
+```
+
+**Programmatically:**
+
 ```bash
 # Build the project
 npm run build
 
 # Run health check with in-memory storage
-node -e "
-const { performHealthCheck, formatHealthCheckResult } = require('./dist/healthCheck');
-performHealthCheck().then(result => {
-  console.log(formatHealthCheckResult(result));
-  process.exit(result.status === 'unhealthy' ? 1 : 0);
-});
-"
+node dist/healthCheckCli.js
 
-# Run health check with Cosmos DB (requires environment variables)
-export COSMOS_DB_ENDPOINT="https://your-account.documents.azure.com:443/"
-export COSMOS_DB_KEY="your-key"
+# Or using the module directly
 node -e "
 const { performHealthCheck, formatHealthCheckResult } = require('./dist/healthCheck');
 performHealthCheck().then(result => {
