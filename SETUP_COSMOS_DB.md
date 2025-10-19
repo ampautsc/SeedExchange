@@ -28,7 +28,7 @@ The following environment variables are required for Cosmos DB integration:
 
 ### Local Development
 
-1. Copy the `.env.example` file to `.env`:
+1. Copy the `.env.example` file (included in the repository) to `.env`:
    ```bash
    cp .env.example .env
    ```
