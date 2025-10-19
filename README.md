@@ -12,6 +12,7 @@ A TypeScript-based API for managing seed exchanges between users. The API suppor
 - **Azure Authentication**: Uses Azure user tokens to identify users
 - **Unified Data Model**: Single SeedExchange collection tracks the full lifecycle from request/offer to confirmation and delivery
 - **Multiple Storage Options**: Supports both in-memory storage (for testing/development) and Azure Cosmos DB (for production)
+- **Health Checks**: Comprehensive health monitoring for service and dependencies
 
 ## Installation
 
@@ -178,6 +179,97 @@ The Cosmos DB implementation uses:
 - **Partition Key**: `plantId` - Ensures efficient querying by plant type
 - **Indexing**: Automatic indexing on all paths for flexible queries
 - **Container**: `SeedExchanges` - Stores all seed exchange documents
+
+## Health Checks
+
+The SeedExchange API includes comprehensive health check functionality to monitor service availability and dependency status.
+
+### Running Health Checks
+
+**Programmatically:**
+
+```typescript
+import { performHealthCheck, formatHealthCheckResult } from 'seed-exchange-api';
+
+// Perform health check
+const result = await performHealthCheck();
+
+// Display formatted results
+console.log(formatHealthCheckResult(result));
+
+// Check status programmatically
+if (result.status === 'healthy') {
+  console.log('✅ All systems operational');
+} else if (result.status === 'degraded') {
+  console.warn('⚠️ Service degraded');
+} else {
+  console.error('❌ Service unhealthy');
+}
+```
+
+**Via Command Line:**
+
+```bash
+npm run build
+node -e "
+const { performHealthCheck, formatHealthCheckResult } = require('./dist/healthCheck');
+performHealthCheck().then(result => {
+  console.log(formatHealthCheckResult(result));
+  process.exit(result.status === 'unhealthy' ? 1 : 0);
+});
+"
+```
+
+**Via GitHub Actions:**
+
+The repository includes a [Health Check workflow](.github/workflows/health-check.yml) that can be:
+- Manually triggered via the Actions tab
+- Scheduled to run daily at 6:00 AM UTC
+- Automatically run when health check code changes
+
+To manually trigger:
+1. Go to the Actions tab in GitHub
+2. Select "Health Check" workflow
+3. Click "Run workflow"
+4. Choose environment (in-memory or cosmos-db)
+
+### Health Check Features
+
+The health check verifies:
+- ✅ Storage backend connectivity (in-memory or Cosmos DB)
+- ✅ Write operations (create records)
+- ✅ Read operations (retrieve records)
+- ✅ Query operations (search records)
+- ✅ Delete operations (remove records)
+- ✅ Data integrity (correct data returned)
+- ✅ Cleanup (test data removed)
+
+### Health Status Levels
+
+| Status | Meaning | Example |
+|--------|---------|---------|
+| `healthy` | All dependencies functioning normally | All operations complete successfully |
+| `degraded` | Service operational with non-critical issues | Slower than expected response times |
+| `unhealthy` | Critical dependency failure | Cannot connect to Cosmos DB |
+
+### Health Check Response
+
+```typescript
+interface HealthCheckResult {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  timestamp: Date;
+  dependencies: Array<{
+    name: string;
+    status: 'healthy' | 'degraded' | 'unhealthy';
+    message: string;
+    responseTime?: number;
+    details?: Record<string, unknown>;
+  }>;
+  version?: string;
+}
+```
+
+For complete health check documentation, see [HEALTH_CHECK_STANDARDS.md](./HEALTH_CHECK_STANDARDS.md).
 
 ## Usage
 
