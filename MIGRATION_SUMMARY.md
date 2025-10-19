@@ -34,37 +34,63 @@ The application now **automatically uses Cosmos DB** when the appropriate enviro
 
 ## What You Need to Do
 
-### Step 1: Get Your Cosmos DB Credentials
+### Step 1: Set Up Azure Key Vault (Recommended)
 
-If you haven't already, you need your Cosmos DB endpoint and key:
+For production security, store your Cosmos DB key in Azure Key Vault:
 
-1. Go to Azure Portal: https://portal.azure.com
-2. Navigate to your Cosmos DB account
-3. Click on "Keys" in the left menu
-4. Copy:
-   - **URI** (this is your `COSMOS_DB_ENDPOINT`)
-   - **PRIMARY KEY** (this is your `COSMOS_DB_KEY`)
+1. **Create a Key Vault** (if not already created):
+   ```bash
+   az keyvault create --name your-keyvault --resource-group your-resource-group --location eastus
+   ```
 
-### Step 2: Add Secrets to GitHub
+2. **Get your Cosmos DB credentials**:
+   - Go to Azure Portal: https://portal.azure.com
+   - Navigate to your Cosmos DB account
+   - Click on "Keys" in the left menu
+   - Copy the **URI** (this is your `COSMOS_DB_ENDPOINT`)
+   - Copy the **PRIMARY KEY**
 
-You mentioned you've already added the secrets - great! Just make sure they're named correctly:
+3. **Store the key in Key Vault**:
+   ```bash
+   az keyvault secret set --vault-name your-keyvault --name CosmosDbKey --value "your-primary-key"
+   ```
 
-1. Go to your repository: https://github.com/ampautsc/SeedExchange
-2. Go to **Settings** → **Secrets and variables** → **Actions**
-3. Verify you have these secrets:
-   - `COSMOS_DB_ENDPOINT` - Your Cosmos DB endpoint URL
-   - `COSMOS_DB_KEY` - Your Cosmos DB key
+4. **Grant access** to your application (if using managed identity):
+   ```bash
+   az keyvault set-policy --name your-keyvault --object-id <your-managed-identity-id> --secret-permissions get
+   ```
 
-**Important**: The secret names must be exactly as shown above (case-sensitive).
+### Step 2: Configure Environment Variables
+
+**Option A: Using Azure Key Vault (Production)**
+
+Set these environment variables:
+```bash
+export COSMOS_DB_ENDPOINT="https://your-account.documents.azure.com:443/"
+export AZURE_KEY_VAULT_URI="https://your-keyvault.vault.azure.net/"
+```
+
+**Option B: Using Environment Variable (Development Only)**
+
+For local testing only:
+```bash
+export COSMOS_DB_ENDPOINT="https://your-account.documents.azure.com:443/"
+export COSMOS_DB_KEY="your-cosmos-db-key"
+```
+
+**Note:** For production and GitHub Actions, always use Azure Key Vault.
 
 ### Step 3: Test Locally (Optional)
 
 To test on your local machine:
 
 ```bash
+# If using Key Vault, login to Azure first
+az login
+
 # Set environment variables
 export COSMOS_DB_ENDPOINT="https://your-account.documents.azure.com:443/"
-export COSMOS_DB_KEY="your-cosmos-db-key"
+export AZURE_KEY_VAULT_URI="https://your-keyvault.vault.azure.net/"
 
 # Build and run the example
 npm run build
@@ -74,8 +100,25 @@ node dist/example.js
 You should see:
 ```
 Initializing Cosmos DB collections...
+✓ Retrieved Cosmos DB key from Azure Key Vault
 ✓ Cosmos DB collections initialized successfully
 ```
+
+### Step 4: Update GitHub Actions (If Using Key Vault)
+
+If you want to use Key Vault in CI/CD:
+
+1. Set up Azure OIDC authentication in your GitHub workflow
+2. Add these secrets to GitHub:
+   - `AZURE_CLIENT_ID`
+   - `AZURE_TENANT_ID`
+   - `AZURE_SUBSCRIPTION_ID`
+   - `COSMOS_DB_ENDPOINT`
+   - `AZURE_KEY_VAULT_URI`
+
+See SETUP_COSMOS_DB.md for detailed instructions.
+
+Alternatively, you can continue using `COSMOS_DB_KEY` as a GitHub Secret for development/testing purposes.
 
 ### Step 4: Verify in CI/CD
 
@@ -92,7 +135,9 @@ They can now use your API with automatic storage selection:
 ```typescript
 import { initializeCollections, SubmitSeedOffer } from 'seed-exchange-api';
 
-// Automatically uses Cosmos DB if COSMOS_DB_ENDPOINT and COSMOS_DB_KEY are set
+// Automatically uses Cosmos DB when configured
+// Retrieves key from Azure Key Vault if AZURE_KEY_VAULT_URI is set
+// Falls back to COSMOS_DB_KEY environment variable if Key Vault is not configured
 const collections = await initializeCollections();
 
 const user = {
@@ -110,18 +155,26 @@ console.log('Offer created:', result);
 
 The app automatically detects which storage to use:
 
-- **Cosmos DB**: When both `COSMOS_DB_ENDPOINT` and `COSMOS_DB_KEY` environment variables are set
-- **In-Memory**: When credentials are not available (useful for testing/development)
+- **Cosmos DB with Key Vault**: When `COSMOS_DB_ENDPOINT` and `AZURE_KEY_VAULT_URI` are set (recommended)
+- **Cosmos DB with Environment Variable**: When `COSMOS_DB_ENDPOINT` and `COSMOS_DB_KEY` are set (development only)
+- **In-Memory**: When Cosmos DB credentials are not available (useful for testing/development)
 
 ### Graceful Fallback
 
-If Cosmos DB connection fails for any reason, the app automatically falls back to in-memory storage, ensuring your application continues to work.
+If Cosmos DB connection or Key Vault access fails for any reason, the app automatically falls back to in-memory storage, ensuring your application continues to work.
 
 ## What Data You Need
 
-You asked "let me know what data you need" - the Cosmos DB integration is now complete and only needs these two pieces of information:
+The Cosmos DB integration is now complete. Here's what you need:
 
+**Required:**
 1. **`COSMOS_DB_ENDPOINT`**: Your Cosmos DB account endpoint (URI from Azure Portal)
+
+**For Production (Recommended):**
+2. **`AZURE_KEY_VAULT_URI`**: Your Azure Key Vault URI
+3. **Cosmos DB Key stored in Key Vault** as a secret named "CosmosDbKey"
+
+**For Development/Testing:**
 2. **`COSMOS_DB_KEY`**: Your Cosmos DB account key (Primary or Secondary Key from Azure Portal)
 
 That's it! The database and container will be automatically created when the app first connects.

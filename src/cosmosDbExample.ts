@@ -46,7 +46,7 @@ async function runCosmosDbDemo() {
 
     // Initialize Cosmos DB collections
     console.log('Initializing Azure Cosmos DB connection...');
-    const config = getCosmosDbConfig();
+    const config = await getCosmosDbConfig();
     const collections = await CosmosDbSeedExchangeCollections.initialize(config);
     console.log('✓ Connected to Cosmos DB\n');
 

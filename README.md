@@ -102,12 +102,34 @@ For production deployments, use Azure Cosmos DB for persistent, scalable storage
 #### Prerequisites
 
 1. Create an Azure Cosmos DB account
-2. Obtain the connection endpoint and key from the Azure Portal
-3. Set environment variables:
+2. Obtain the connection endpoint from the Azure Portal
+3. Store the Cosmos DB key securely in Azure Key Vault (recommended) or use environment variables
+
+#### Configuration Options
+
+**Option 1: Azure Key Vault (Recommended for Production)**
+
+```bash
+export COSMOS_DB_ENDPOINT="https://your-account.documents.azure.com:443/"
+export AZURE_KEY_VAULT_URI="https://your-keyvault.vault.azure.net/"
+# Optional: specify secret name (defaults to "CosmosDbKey")
+export COSMOS_DB_KEY_SECRET_NAME="CosmosDbKey"
+```
+
+Store your Cosmos DB key in Azure Key Vault as a secret named "CosmosDbKey" (or your custom name).
+
+**Option 2: Environment Variable (Development Only)**
 
 ```bash
 export COSMOS_DB_ENDPOINT="https://your-account.documents.azure.com:443/"
 export COSMOS_DB_KEY="your-cosmos-db-key"
+```
+
+**Note:** For production, always use Azure Key Vault to store sensitive credentials.
+
+**Optional Configuration:**
+
+```bash
 export COSMOS_DB_DATABASE_ID="SeedExchange"  # Optional, defaults to "SeedExchange"
 export COSMOS_DB_CONTAINER_ID="SeedExchanges"  # Optional, defaults to "SeedExchanges"
 ```
@@ -120,6 +142,7 @@ Once environment variables are set, simply use `initializeCollections()`:
 import { initializeCollections, SubmitSeedOffer } from 'seed-exchange-api';
 
 // Will automatically use Cosmos DB when credentials are available
+// Retrieves key from Key Vault if AZURE_KEY_VAULT_URI is set
 const collections = await initializeCollections();
 const result = await SubmitSeedOffer(user, plantId, quantity, collections);
 ```

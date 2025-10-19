@@ -5,16 +5,19 @@ import { getCosmosDbConfig } from './cosmosDbConfig';
 
 /**
  * Initialize collections based on environment configuration.
- * If COSMOS_DB_ENDPOINT and COSMOS_DB_KEY are set, uses Cosmos DB.
+ * If COSMOS_DB_ENDPOINT and either AZURE_KEY_VAULT_URI or COSMOS_DB_KEY are set, uses Cosmos DB.
  * Otherwise, falls back to in-memory collections.
  */
 export async function initializeCollections(): Promise<ISeedExchangeCollections> {
-  const hasCosmosConfig = process.env.COSMOS_DB_ENDPOINT && process.env.COSMOS_DB_KEY;
+  const hasCosmosEndpoint = process.env.COSMOS_DB_ENDPOINT;
+  const hasKeyVault = process.env.AZURE_KEY_VAULT_URI;
+  const hasEnvKey = process.env.COSMOS_DB_KEY;
+  const hasCosmosConfig = hasCosmosEndpoint && (hasKeyVault || hasEnvKey);
   
   if (hasCosmosConfig) {
     try {
       console.log('Initializing Cosmos DB collections...');
-      const config = getCosmosDbConfig();
+      const config = await getCosmosDbConfig();
       const collections = await CosmosDbSeedExchangeCollections.initialize(config);
       console.log('✓ Cosmos DB collections initialized successfully');
       return collections;
@@ -24,7 +27,7 @@ export async function initializeCollections(): Promise<ISeedExchangeCollections>
       return new SeedExchangeCollections();
     }
   } else {
-    console.log('Using in-memory collections (set COSMOS_DB_ENDPOINT and COSMOS_DB_KEY to use Cosmos DB)');
+    console.log('Using in-memory collections (set COSMOS_DB_ENDPOINT and AZURE_KEY_VAULT_URI or COSMOS_DB_KEY to use Cosmos DB)');
     return new SeedExchangeCollections();
   }
 }
