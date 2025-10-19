@@ -151,13 +151,14 @@ This will demonstrate:
 
 ### Run the Cosmos DB Example
 
-For a more detailed demo:
+For a more detailed demo with Cosmos DB-specific features:
 
 ```bash
+npm run build
 node dist/cosmosDbExample.js
 ```
 
-This shows the full lifecycle with Cosmos DB persistence.
+This example demonstrates the full lifecycle with Cosmos DB persistence, including initialization and connection feedback.
 
 ## Troubleshooting
 
@@ -189,7 +190,7 @@ The app will automatically fall back to in-memory storage in this case.
 For more details, see:
 - **SETUP_COSMOS_DB.md** - Comprehensive setup guide
 - **README.md** - Usage examples and API reference
-- **COSMOS_DB_INTEGRATION.md** - Technical integration details (already existed)
+- **COSMOS_DB_INTEGRATION.md** - Technical integration details
 
 ## Questions?
 
