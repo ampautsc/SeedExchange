@@ -1,4 +1,4 @@
-import { SubmitSeedOffer, SubmitSeedRequest, Withdraw, collections, AzureUserToken } from './index';
+import { SubmitSeedOffer, SubmitSeedRequest, Withdraw, initializeCollections, AzureUserToken } from './index';
 
 // Example: Demonstrating the Seed Exchange API
 
@@ -23,6 +23,10 @@ const charlie: AzureUserToken = {
 
 async function runDemo() {
   console.log('=== Seed Exchange Demo ===\n');
+
+  // Initialize collections (will use Cosmos DB if configured, otherwise in-memory)
+  const collections = await initializeCollections();
+  console.log('');
 
   // Scenario 1: Alice offers tomato seeds
   console.log('1. Alice offers 5 packets of tomato seeds');

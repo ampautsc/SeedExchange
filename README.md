@@ -53,7 +53,29 @@ The repository includes a GitHub Actions workflow (`.github/workflows/test.yml`)
 
 ## Storage Options
 
-### In-Memory Storage (Default)
+### Automatic Storage Selection
+
+The API automatically selects the appropriate storage backend based on environment configuration:
+- **Cosmos DB**: Used when `COSMOS_DB_ENDPOINT` and `COSMOS_DB_KEY` environment variables are set
+- **In-Memory**: Used as fallback when Cosmos DB credentials are not available
+
+```typescript
+import { initializeCollections, SubmitSeedOffer } from 'seed-exchange-api';
+
+// Automatically uses Cosmos DB if configured, otherwise in-memory
+const collections = await initializeCollections();
+
+const user = {
+  userId: 'user-123',
+  email: 'user@example.com',
+  name: 'John Doe'
+};
+
+const offerResult = await SubmitSeedOffer(user, 'tomato-123', 5, collections);
+console.log('Offer created:', offerResult);
+```
+
+### In-Memory Storage (Development/Testing)
 
 The in-memory storage implementation is ideal for development, testing, and scenarios where persistence is not required. Data is stored in a JavaScript Map and will be lost when the application stops.
 
@@ -64,6 +86,15 @@ import { SeedExchangeCollections } from 'seed-exchange-api';
 const collections = new SeedExchangeCollections();
 ```
 
+Or use the factory function:
+
+```typescript
+import { getInMemoryCollections } from 'seed-exchange-api';
+
+// Explicitly get in-memory collections
+const collections = getInMemoryCollections();
+```
+
 ### Azure Cosmos DB Storage (Production)
 
 For production deployments, use Azure Cosmos DB for persistent, scalable storage. This implementation automatically handles database and container creation.
@@ -71,17 +102,52 @@ For production deployments, use Azure Cosmos DB for persistent, scalable storage
 #### Prerequisites
 
 1. Create an Azure Cosmos DB account
-2. Obtain the connection endpoint and key from the Azure Portal
-3. Set environment variables:
+2. Obtain the connection endpoint from the Azure Portal
+3. Store the Cosmos DB key securely in Azure Key Vault (recommended) or use environment variables
+
+#### Configuration Options
+
+**Option 1: Azure Key Vault (Recommended for Production)**
+
+```bash
+export COSMOS_DB_ENDPOINT="https://your-account.documents.azure.com:443/"
+export AZURE_KEY_VAULT_URI="https://your-keyvault.vault.azure.net/"
+# Optional: specify secret name (defaults to "CosmosDbKey")
+export COSMOS_DB_KEY_SECRET_NAME="CosmosDbKey"
+```
+
+Store your Cosmos DB key in Azure Key Vault as a secret named "CosmosDbKey" (or your custom name).
+
+**Option 2: Environment Variable (Development Only)**
 
 ```bash
 export COSMOS_DB_ENDPOINT="https://your-account.documents.azure.com:443/"
 export COSMOS_DB_KEY="your-cosmos-db-key"
+```
+
+**Note:** For production, always use Azure Key Vault to store sensitive credentials.
+
+**Optional Configuration:**
+
+```bash
 export COSMOS_DB_DATABASE_ID="SeedExchange"  # Optional, defaults to "SeedExchange"
 export COSMOS_DB_CONTAINER_ID="SeedExchanges"  # Optional, defaults to "SeedExchanges"
 ```
 
-#### Usage
+#### Automatic Usage
+
+Once environment variables are set, simply use `initializeCollections()`:
+
+```typescript
+import { initializeCollections, SubmitSeedOffer } from 'seed-exchange-api';
+
+// Will automatically use Cosmos DB when credentials are available
+// Retrieves key from Key Vault if AZURE_KEY_VAULT_URI is set
+const collections = await initializeCollections();
+const result = await SubmitSeedOffer(user, plantId, quantity, collections);
+```
+
+#### Manual Usage
 
 ```typescript
 import { 
@@ -114,6 +180,38 @@ The Cosmos DB implementation uses:
 - **Container**: `SeedExchanges` - Stores all seed exchange documents
 
 ## Usage
+
+### Recommended Approach (Automatic Storage Selection)
+
+```typescript
+import { SubmitSeedOffer, SubmitSeedRequest, Withdraw, initializeCollections } from 'seed-exchange-api';
+
+// Initialize collections (automatically uses Cosmos DB if configured)
+const collections = await initializeCollections();
+
+// Define user authentication token
+const user = {
+  userId: 'user-123',
+  email: 'user@example.com',
+  name: 'John Doe'
+};
+
+// Submit a seed offer (5 packets of tomatoes)
+const offerResult = await SubmitSeedOffer(user, 'tomato-123', 5, collections);
+console.log('Filled exchanges:', offerResult.filledExchanges);
+console.log('Remaining offer:', offerResult.remainingOffer);
+
+// Submit a seed request (always 1 packet)
+const requestResult = await SubmitSeedRequest(user, 'carrot-456', collections);
+console.log('Request filled:', requestResult.filled);
+console.log('Exchange details:', requestResult.exchange);
+
+// Withdraw an open request or offer
+const withdrawResult = await Withdraw(user, requestResult.remainingRequest!.id, collections);
+console.log('Withdrawal successful:', withdrawResult.success);
+```
+
+### Alternative: Using In-Memory Collections Directly
 
 ```typescript
 import { SubmitSeedOffer, SubmitSeedRequest, Withdraw, collections } from 'seed-exchange-api';
