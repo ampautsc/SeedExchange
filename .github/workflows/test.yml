@@ -37,6 +37,15 @@ jobs:
     - name: Run all tests
       run: npm test -- --coverage
       
+    - name: Test with Cosmos DB (if credentials available)
+      if: ${{ secrets.COSMOS_DB_ENDPOINT != '' && secrets.COSMOS_DB_KEY != '' }}
+      env:
+        COSMOS_DB_ENDPOINT: ${{ secrets.COSMOS_DB_ENDPOINT }}
+        COSMOS_DB_KEY: ${{ secrets.COSMOS_DB_KEY }}
+      run: |
+        echo "Testing with Cosmos DB integration..."
+        node dist/example.js
+      
     - name: Upload coverage reports
       uses: codecov/codecov-action@v4
       if: matrix.node-version == '20.x'
