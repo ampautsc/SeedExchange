@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "test": "jest",
-    "lint": "eslint src/**/*.ts"
+    "lint": "eslint src/**/*.ts",
+    "health-check": "npm run build && node dist/healthCheckCli.js"
   },
   "keywords": [
     "seed",

@@ -1,0 +1,177 @@
+name: Health Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to check'
+        required: false
+        default: 'in-memory'
+        type: choice
+        options:
+          - in-memory
+          - cosmos-db
+  schedule:
+    # Run health check daily at 6:00 AM UTC
+    - cron: '0 6 * * *'
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'src/healthCheck.ts'
+      - '.github/workflows/health-check.yml'
+
+jobs:
+  health-check-in-memory:
+    name: Health Check (In-Memory)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build
+      run: npm run build
+      
+    - name: Run health check (In-Memory)
+      run: |
+        node -e "
+        const { performHealthCheck, formatHealthCheckResult } = require('./dist/healthCheck');
+        
+        (async () => {
+          try {
+            console.log('Running health check with in-memory storage...');
+            console.log('');
+            
+            const result = await performHealthCheck();
+            const formatted = formatHealthCheckResult(result);
+            
+            console.log(formatted);
+            console.log('');
+            
+            if (result.status === 'unhealthy') {
+              console.error('Health check failed!');
+              process.exit(1);
+            } else if (result.status === 'degraded') {
+              console.warn('Health check shows degraded status');
+              process.exit(0); // Don't fail on degraded
+            } else {
+              console.log('Health check passed!');
+              process.exit(0);
+            }
+          } catch (error) {
+            console.error('Health check error:', error);
+            process.exit(1);
+          }
+        })();
+        "
+
+  health-check-cosmos-db:
+    name: Health Check (Cosmos DB)
+    runs-on: ubuntu-latest
+    # Only run if secrets are available
+    if: ${{ github.event.inputs.environment == 'cosmos-db' || (vars.COSMOS_DB_ENDPOINT && secrets.COSMOS_DB_KEY) }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build
+      run: npm run build
+      
+    - name: Run health check (Cosmos DB)
+      env:
+        COSMOS_DB_ENDPOINT: ${{ vars.COSMOS_DB_ENDPOINT || secrets.COSMOS_DB_ENDPOINT }}
+        COSMOS_DB_KEY: ${{ secrets.COSMOS_DB_KEY }}
+      run: |
+        node -e "
+        const { performHealthCheck, formatHealthCheckResult } = require('./dist/healthCheck');
+        
+        (async () => {
+          try {
+            console.log('Running health check with Cosmos DB storage...');
+            console.log('Endpoint:', process.env.COSMOS_DB_ENDPOINT);
+            console.log('');
+            
+            const result = await performHealthCheck();
+            const formatted = formatHealthCheckResult(result);
+            
+            console.log(formatted);
+            console.log('');
+            
+            if (result.status === 'unhealthy') {
+              console.error('Health check failed!');
+              process.exit(1);
+            } else if (result.status === 'degraded') {
+              console.warn('Health check shows degraded status');
+              process.exit(0); // Don't fail on degraded
+            } else {
+              console.log('Health check passed!');
+              process.exit(0);
+            }
+          } catch (error) {
+            console.error('Health check error:', error);
+            process.exit(1);
+          }
+        })();
+        "
+    
+    - name: Report health check failure
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const issue_number = context.issue.number;
+          if (issue_number) {
+            github.rest.issues.createComment({
+              issue_number: issue_number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '⚠️ Health check failed for Cosmos DB. Please investigate.'
+            });
+          }
+
+  summary:
+    name: Health Check Summary
+    runs-on: ubuntu-latest
+    needs: [health-check-in-memory]
+    if: always()
+    
+    steps:
+    - name: Generate summary
+      run: |
+        echo "# Health Check Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Storage Backend | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|----------------|--------|" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ needs.health-check-in-memory.result }}" == "success" ]; then
+          echo "| In-Memory | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| In-Memory | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ "${{ needs.health-check-cosmos-db.result }}" == "success" ]; then
+          echo "| Cosmos DB | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ needs.health-check-cosmos-db.result }}" == "skipped" ]; then
+          echo "| Cosmos DB | ⏭️ Skipped |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| Cosmos DB | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+        fi
