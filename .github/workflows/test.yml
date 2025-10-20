@@ -38,7 +38,7 @@ jobs:
       run: npm test -- --coverage
       
     - name: Test with Cosmos DB (if credentials available)
-      if: false  # Disabled - enable by setting condition when secrets are configured
+      if: false  # Disabled - requires Cosmos DB secrets to be configured. See SETUP_COSMOS_DB.md
       env:
         COSMOS_DB_ENDPOINT: ${{ secrets.COSMOS_DB_ENDPOINT }}
         COSMOS_DB_KEY: ${{ secrets.COSMOS_DB_KEY }}
