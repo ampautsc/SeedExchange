@@ -78,7 +78,7 @@ jobs:
     name: Health Check (Cosmos DB)
     runs-on: ubuntu-latest
     # Only run if secrets are available
-    if: ${{ github.event.inputs.environment == 'cosmos-db' || (vars.COSMOS_DB_ENDPOINT && secrets.COSMOS_DB_KEY) }}
+    if: ${{ github.event.inputs.environment == 'cosmos-db' || (vars.COSMOS_DB_ENDPOINT != '' && secrets.COSMOS_DB_KEY != '') }}
     
     steps:
     - name: Checkout code
