@@ -38,7 +38,7 @@ jobs:
       run: npm test -- --coverage
       
     - name: Test with Cosmos DB (if credentials available)
-      if: secrets.COSMOS_DB_ENDPOINT != '' && secrets.COSMOS_DB_KEY != ''
+      if: false  # Disabled - enable by setting condition when secrets are configured
       env:
         COSMOS_DB_ENDPOINT: ${{ secrets.COSMOS_DB_ENDPOINT }}
         COSMOS_DB_KEY: ${{ secrets.COSMOS_DB_KEY }}

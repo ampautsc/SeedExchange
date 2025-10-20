@@ -77,8 +77,8 @@ jobs:
   health-check-cosmos-db:
     name: Health Check (Cosmos DB)
     runs-on: ubuntu-latest
-    # Only run if secrets are available
-    if: github.event.inputs.environment == 'cosmos-db' || (vars.COSMOS_DB_ENDPOINT != '' && secrets.COSMOS_DB_KEY != '')
+    # Only run if secrets are available - currently disabled
+    if: false  # Change to true when Cosmos DB secrets are configured
     
     steps:
     - name: Checkout code
