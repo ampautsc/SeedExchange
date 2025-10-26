@@ -7,6 +7,11 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+# Required for OIDC authentication to Azure using SeedExchangeServiceIdentity managed identity
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -37,13 +42,22 @@ jobs:
     - name: Run all tests
       run: npm test -- --coverage
       
+    - name: Azure Login (for Key Vault access)
+      if: vars.AZURE_CLIENT_ID != '' && vars.AZURE_TENANT_ID != '' && vars.AZURE_SUBSCRIPTION_ID != ''
+      uses: azure/login@v2
+      with:
+        client-id: ${{ vars.AZURE_CLIENT_ID }}
+        tenant-id: ${{ vars.AZURE_TENANT_ID }}
+        subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        # This workflow uses SeedExchangeServiceIdentity managed identity for Azure Key Vault access
+      
     - name: Test with Cosmos DB (if credentials available)
-      if: false  # Disabled - requires Cosmos DB secrets to be configured. See SETUP_COSMOS_DB.md
+      if: vars.COSMOS_DB_ENDPOINT != '' && vars.AZURE_KEY_VAULT_URI != ''
       env:
-        COSMOS_DB_ENDPOINT: ${{ secrets.COSMOS_DB_ENDPOINT }}
-        COSMOS_DB_KEY: ${{ secrets.COSMOS_DB_KEY }}
+        COSMOS_DB_ENDPOINT: ${{ vars.COSMOS_DB_ENDPOINT }}
+        AZURE_KEY_VAULT_URI: ${{ vars.AZURE_KEY_VAULT_URI }}
       run: |
-        echo "Testing with Cosmos DB integration..."
+        echo "Testing with Cosmos DB integration using managed identity..."
         node dist/example.js
       
     - name: Upload coverage reports

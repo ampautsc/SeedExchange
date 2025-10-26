@@ -19,6 +19,12 @@ export interface CosmosDbConfig {
  * 1. Key Vault (if AZURE_KEY_VAULT_URI is set)
  * 2. Environment variables
  * 
+ * Azure Authentication:
+ * - Uses DefaultAzureCredential which supports multiple authentication methods
+ * - In production: Uses SeedExchangeServiceIdentity managed identity for Key Vault access
+ * - In development: Uses Azure CLI credentials (az login)
+ * - In CI/CD: Uses federated OIDC credentials configured in GitHub Actions
+ * 
  * Required environment variables:
  * - COSMOS_DB_ENDPOINT: Cosmos DB endpoint URL
  * - AZURE_KEY_VAULT_URI: Key Vault URI (optional, for secure key storage)
@@ -41,6 +47,7 @@ export async function getCosmosDbConfig(): Promise<CosmosDbConfig> {
   let key: string | undefined;
 
   // Try to get key from Azure Key Vault first
+  // Uses SeedExchangeServiceIdentity managed identity in production
   if (keyVaultUri) {
     try {
       const credential = new DefaultAzureCredential();
