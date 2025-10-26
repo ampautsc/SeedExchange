@@ -287,7 +287,13 @@ Test that the managed identity can access Key Vault:
 
 ```bash
 # Get an access token using the managed identity (run from Azure resource)
-ACCESS_TOKEN=$(curl -H "Metadata:true" "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://vault.azure.net&client_id=$IDENTITY_CLIENT_ID" | jq -r .access_token)
+ACCESS_TOKEN=$(curl -s -H "Metadata:true" "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://vault.azure.net&client_id=$IDENTITY_CLIENT_ID" | jq -r .access_token)
+
+# Verify token was retrieved successfully
+if [ -z "$ACCESS_TOKEN" ] || [ "$ACCESS_TOKEN" == "null" ]; then
+  echo "Error: Failed to retrieve access token"
+  exit 1
+fi
 
 # Test accessing a secret
 curl -H "Authorization: Bearer $ACCESS_TOKEN" "https://your-keyvault.vault.azure.net/secrets/CosmosDbKey?api-version=7.3"
