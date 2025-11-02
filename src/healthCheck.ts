@@ -32,17 +32,20 @@ export interface HealthCheckResult {
 }
 
 /**
+ * Constants for the Cosmos DB readme document location
+ * The readme is stored in a separate collection from the seed exchanges data
+ */
+const README_DATABASE = 'SeedExchange';
+const README_COLLECTION = 'SeedExchange';
+const README_ITEM_ID = 'readme';
+const README_PARTITION_KEY = 'readme';
+
+/**
  * Check Cosmos DB connectivity by retrieving the readme document
  * Database: SeedExchange, Collection: SeedExchange, Item: readme
  */
 async function checkCosmosDbConnectivity(): Promise<DependencyHealth> {
   const startTime = Date.now();
-  
-  // Readme is in a specific collection separate from the seed exchanges data
-  const README_DATABASE = 'SeedExchange';
-  const README_COLLECTION = 'SeedExchange';
-  const README_ITEM_ID = 'readme';
-  const README_PARTITION_KEY = 'readme';
   
   try {
     const config = await getCosmosDbConfig();
@@ -213,9 +216,9 @@ export async function performHealthCheck(
     const collectionsToUse = collections || await initializeCollections();
     
     // Check Cosmos DB connectivity if using Cosmos DB
-    const hasCosmosEndpoint = process.env.COSMOS_DB_ENDPOINT;
-    const hasKeyVault = process.env.AZURE_KEY_VAULT_URI;
-    const hasEnvKey = process.env.COSMOS_DB_KEY;
+    const hasCosmosEndpoint = !!process.env.COSMOS_DB_ENDPOINT;
+    const hasKeyVault = !!process.env.AZURE_KEY_VAULT_URI;
+    const hasEnvKey = !!process.env.COSMOS_DB_KEY;
     const hasCosmosConfig = hasCosmosEndpoint && (hasKeyVault || hasEnvKey);
     
     if (hasCosmosConfig) {

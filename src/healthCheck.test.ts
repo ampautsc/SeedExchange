@@ -224,18 +224,29 @@ describe('Health Check', () => {
       const originalKey = process.env.COSMOS_DB_KEY;
       const originalKeyVault = process.env.AZURE_KEY_VAULT_URI;
       
-      process.env.COSMOS_DB_ENDPOINT = 'https://test.documents.azure.com:443/';
-      delete process.env.COSMOS_DB_KEY;
-      delete process.env.AZURE_KEY_VAULT_URI;
+      try {
+        process.env.COSMOS_DB_ENDPOINT = 'https://test.documents.azure.com:443/';
+        delete process.env.COSMOS_DB_KEY;
+        delete process.env.AZURE_KEY_VAULT_URI;
 
-      const result = await performHealthCheck(collections);
+        const result = await performHealthCheck(collections);
 
-      const cosmosDbDep = result.dependencies.find(d => d.name === 'cosmos-db');
-      expect(cosmosDbDep).toBeUndefined();
-
-      process.env.COSMOS_DB_ENDPOINT = originalEndpoint;
-      process.env.COSMOS_DB_KEY = originalKey;
-      process.env.AZURE_KEY_VAULT_URI = originalKeyVault;
+        const cosmosDbDep = result.dependencies.find(d => d.name === 'cosmos-db');
+        expect(cosmosDbDep).toBeUndefined();
+      } finally {
+        // Restore environment variables
+        if (originalEndpoint !== undefined) {
+          process.env.COSMOS_DB_ENDPOINT = originalEndpoint;
+        } else {
+          delete process.env.COSMOS_DB_ENDPOINT;
+        }
+        if (originalKey !== undefined) {
+          process.env.COSMOS_DB_KEY = originalKey;
+        }
+        if (originalKeyVault !== undefined) {
+          process.env.AZURE_KEY_VAULT_URI = originalKeyVault;
+        }
+      }
     });
   });
 });
