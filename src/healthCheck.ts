@@ -38,6 +38,12 @@ export interface HealthCheckResult {
 async function checkCosmosDbConnectivity(): Promise<DependencyHealth> {
   const startTime = Date.now();
   
+  // Readme is in a specific collection separate from the seed exchanges data
+  const README_DATABASE = 'SeedExchange';
+  const README_COLLECTION = 'SeedExchange';
+  const README_ITEM_ID = 'readme';
+  const README_PARTITION_KEY = 'readme';
+  
   try {
     const config = await getCosmosDbConfig();
     const client = new CosmosClient({
@@ -46,11 +52,11 @@ async function checkCosmosDbConnectivity(): Promise<DependencyHealth> {
     });
 
     // Try to retrieve the readme document from the SeedExchange collection
-    const database = client.database('SeedExchange');
-    const container = database.container('SeedExchange');
+    const database = client.database(README_DATABASE);
+    const container = database.container(README_COLLECTION);
     
-    // Attempt to read the readme item
-    const { resource } = await container.item('readme', 'readme').read();
+    // Attempt to read the readme item (using partition key for efficient read)
+    const { resource } = await container.item(README_ITEM_ID, README_PARTITION_KEY).read();
     
     const responseTime = Date.now() - startTime;
     
@@ -61,9 +67,9 @@ async function checkCosmosDbConnectivity(): Promise<DependencyHealth> {
         message: 'Cosmos DB connectivity confirmed - readme retrieved successfully',
         responseTime,
         details: {
-          database: 'SeedExchange',
-          collection: 'SeedExchange',
-          itemId: 'readme'
+          database: README_DATABASE,
+          collection: README_COLLECTION,
+          itemId: README_ITEM_ID
         }
       };
     } else {
@@ -73,9 +79,9 @@ async function checkCosmosDbConnectivity(): Promise<DependencyHealth> {
         message: 'Connected to Cosmos DB but readme document not found',
         responseTime,
         details: {
-          database: 'SeedExchange',
-          collection: 'SeedExchange',
-          itemId: 'readme'
+          database: README_DATABASE,
+          collection: README_COLLECTION,
+          itemId: README_ITEM_ID
         }
       };
     }
