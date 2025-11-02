@@ -10,9 +10,19 @@ A TypeScript-based API for managing seed exchanges between users. The API suppor
 - **Withdraw Exchanges**: Users can withdraw their own open requests or offers
 - **FIFO Matching**: Requests and offers are matched in first-in-first-out order
 - **Azure Authentication**: Uses Azure user tokens to identify users
+- **Managed Identity**: Uses SeedExchangeServiceIdentity for secure Azure Key Vault access
 - **Unified Data Model**: Single SeedExchange collection tracks the full lifecycle from request/offer to confirmation and delivery
 - **Multiple Storage Options**: Supports both in-memory storage (for testing/development) and Azure Cosmos DB (for production)
 - **Health Checks**: Comprehensive health monitoring for service and dependencies
+
+## Documentation
+
+- [README.md](./README.md) - This file, overview and basic usage
+- [QUICKSTART.md](./QUICKSTART.md) - Quick start guide
+- [SETUP_COSMOS_DB.md](./SETUP_COSMOS_DB.md) - Azure Cosmos DB setup and configuration
+- [MANAGED_IDENTITY_SETUP.md](./MANAGED_IDENTITY_SETUP.md) - SeedExchangeServiceIdentity managed identity configuration
+- [HEALTH_CHECK_STANDARDS.md](./HEALTH_CHECK_STANDARDS.md) - Health check implementation details
+- [COSMOS_DB_INTEGRATION.md](./COSMOS_DB_INTEGRATION.md) - Cosmos DB integration guide
 
 ## Installation
 
@@ -118,6 +128,8 @@ export COSMOS_DB_KEY_SECRET_NAME="CosmosDbKey"
 ```
 
 Store your Cosmos DB key in Azure Key Vault as a secret named "CosmosDbKey" (or your custom name).
+
+**Authentication:** The application uses the **SeedExchangeServiceIdentity** managed identity to authenticate to Azure Key Vault in production environments. For local development, it uses Azure CLI credentials (`az login`). See [MANAGED_IDENTITY_SETUP.md](./MANAGED_IDENTITY_SETUP.md) for detailed setup instructions.
 
 **Option 2: Environment Variable (Development Only)**
 

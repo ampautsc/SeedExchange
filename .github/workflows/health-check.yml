@@ -20,6 +20,12 @@ on:
       - 'src/healthCheck.ts'
       - '.github/workflows/health-check.yml'
 
+# Required for OIDC authentication to Azure using SeedExchangeServiceIdentity managed identity
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+
 jobs:
   health-check-in-memory:
     name: Health Check (In-Memory)
@@ -77,8 +83,8 @@ jobs:
   health-check-cosmos-db:
     name: Health Check (Cosmos DB)
     runs-on: ubuntu-latest
-    # Disabled - requires Cosmos DB secrets to be configured. See SETUP_COSMOS_DB.md
-    if: false
+    # Enabled when Azure credentials and Cosmos DB configuration are available
+    if: vars.AZURE_CLIENT_ID != '' && vars.AZURE_TENANT_ID != '' && vars.AZURE_SUBSCRIPTION_ID != '' && vars.COSMOS_DB_ENDPOINT != '' && vars.AZURE_KEY_VAULT_URI != ''
     
     steps:
     - name: Checkout code
@@ -96,10 +102,18 @@ jobs:
     - name: Build
       run: npm run build
       
+    - name: Azure Login (for Key Vault access)
+      uses: azure/login@v2
+      with:
+        client-id: ${{ vars.AZURE_CLIENT_ID }}
+        tenant-id: ${{ vars.AZURE_TENANT_ID }}
+        subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        # This workflow uses SeedExchangeServiceIdentity managed identity for Azure Key Vault access
+      
     - name: Run health check (Cosmos DB)
       env:
-        COSMOS_DB_ENDPOINT: ${{ vars.COSMOS_DB_ENDPOINT || secrets.COSMOS_DB_ENDPOINT }}
-        COSMOS_DB_KEY: ${{ secrets.COSMOS_DB_KEY }}
+        COSMOS_DB_ENDPOINT: ${{ vars.COSMOS_DB_ENDPOINT }}
+        AZURE_KEY_VAULT_URI: ${{ vars.AZURE_KEY_VAULT_URI }}
       run: |
         node -e "
         const { performHealthCheck, formatHealthCheckResult } = require('./dist/healthCheck');

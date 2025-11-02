@@ -12,6 +12,7 @@ The SeedExchange API now automatically uses Azure Cosmos DB when the appropriate
    - Go to "Keys" section
    - Copy the "URI" (endpoint)
 3. **Azure Key Vault** (Recommended for production): Create an Azure Key Vault to securely store your Cosmos DB key
+4. **Managed Identity**: The application uses **SeedExchangeServiceIdentity** managed identity for authenticating to Azure Key Vault in production environments
 
 ## Environment Variables
 
@@ -46,12 +47,17 @@ The SeedExchange API now automatically uses Azure Cosmos DB when the appropriate
    ```
 
 3. **Configure managed identity** for your application:
-   - For Azure App Service/Functions: Enable system-assigned managed identity
+   - The application uses **SeedExchangeServiceIdentity** managed identity
+   - For Azure App Service/Functions: Assign the SeedExchangeServiceIdentity to your resource
    - For local development: Use Azure CLI authentication (`az login`)
 
-4. **Grant Key Vault access** to your application's managed identity:
+4. **Grant Key Vault access** to the SeedExchangeServiceIdentity managed identity:
    ```bash
-   az keyvault set-policy --name your-keyvault --object-id <your-managed-identity-id> --secret-permissions get
+   # Get the managed identity's object ID
+   IDENTITY_OBJECT_ID=$(az identity show --name SeedExchangeServiceIdentity --resource-group your-resource-group --query principalId -o tsv)
+   
+   # Grant access to Key Vault
+   az keyvault set-policy --name your-keyvault --object-id $IDENTITY_OBJECT_ID --secret-permissions get
    ```
 
 5. **Set environment variables**:
@@ -105,42 +111,43 @@ The SeedExchange API now automatically uses Azure Cosmos DB when the appropriate
 
 ### GitHub Actions / CI/CD
 
-**Option 1: Using Azure Key Vault (Recommended)**
+**Option 1: Using Azure Key Vault with Managed Identity (Recommended)**
 
-Configure your GitHub Actions workflow to use Azure credentials and Key Vault:
+Configure your GitHub Actions workflow to use Azure OIDC authentication with the SeedExchangeServiceIdentity managed identity:
 
-1. Create a service principal and configure OIDC:
+1. Set up federated credentials for the SeedExchangeServiceIdentity managed identity:
    ```bash
-   az ad sp create-for-rbac --name "github-actions-seedexchange" --role contributor \
-     --scopes /subscriptions/{subscription-id}/resourceGroups/{resource-group}
+   # Get the managed identity details
+   IDENTITY_CLIENT_ID=$(az identity show --name SeedExchangeServiceIdentity --resource-group your-resource-group --query clientId -o tsv)
+   
+   # Create federated credential for GitHub Actions
+   az identity federated-credential create \
+     --name github-seedexchange \
+     --identity-name SeedExchangeServiceIdentity \
+     --resource-group your-resource-group \
+     --issuer https://token.actions.githubusercontent.com \
+     --subject repo:your-org/SeedExchange:ref:refs/heads/main \
+     --audiences api://AzureADTokenExchange
    ```
 
-2. Grant the service principal access to Key Vault:
+2. Grant the SeedExchangeServiceIdentity access to Key Vault (if not already done):
    ```bash
-   az keyvault set-policy --name your-keyvault --spn <service-principal-app-id> --secret-permissions get
+   IDENTITY_OBJECT_ID=$(az identity show --name SeedExchangeServiceIdentity --resource-group your-resource-group --query principalId -o tsv)
+   az keyvault set-policy --name your-keyvault --object-id $IDENTITY_OBJECT_ID --secret-permissions get
    ```
 
-3. Add GitHub secrets for Azure authentication:
-   - `AZURE_CLIENT_ID`: Service principal app ID
+3. Add GitHub repository variables for Azure authentication:
+   - `AZURE_CLIENT_ID`: The SeedExchangeServiceIdentity client ID
    - `AZURE_TENANT_ID`: Azure tenant ID
    - `AZURE_SUBSCRIPTION_ID`: Azure subscription ID
+   - `COSMOS_DB_ENDPOINT`: Your Cosmos DB endpoint
+   - `AZURE_KEY_VAULT_URI`: Your Key Vault URI
 
-4. Update your workflow file:
+4. The workflow files are already configured to use these variables:
+   - `.github/workflows/test.yml` - Test workflow with Cosmos DB integration
+   - `.github/workflows/health-check.yml` - Health check workflow with Cosmos DB support
 
-```yaml
-- name: Azure Login
-  uses: azure/login@v1
-  with:
-    client-id: ${{ secrets.AZURE_CLIENT_ID }}
-    tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-- name: Run Cosmos DB integration tests
-  env:
-    COSMOS_DB_ENDPOINT: ${{ secrets.COSMOS_DB_ENDPOINT }}
-    AZURE_KEY_VAULT_URI: ${{ secrets.AZURE_KEY_VAULT_URI }}
-  run: npm test
-```
+The workflows use OIDC authentication and automatically authenticate as the SeedExchangeServiceIdentity managed identity to access Key Vault and retrieve the Cosmos DB key.
 
 **Option 2: Using GitHub Secrets (Development Only)**
 
@@ -164,18 +171,24 @@ Configure your GitHub Actions workflow to use Azure credentials and Key Vault:
 
 ### Azure App Service / Functions
 
-**Using Azure Key Vault (Recommended)**
+**Using Azure Key Vault with SeedExchangeServiceIdentity (Recommended)**
 
-1. Enable system-assigned managed identity:
-   - Navigate to your App Service or Function App in Azure Portal
-   - Go to **Identity** → **System assigned**
-   - Turn status to **On** and save
-
-2. Grant managed identity access to Key Vault:
+1. Assign the SeedExchangeServiceIdentity managed identity to your App Service or Function App:
    ```bash
-   az keyvault set-policy --name your-keyvault \
-     --object-id <managed-identity-object-id> \
-     --secret-permissions get
+   # Get the managed identity resource ID
+   IDENTITY_ID=$(az identity show --name SeedExchangeServiceIdentity --resource-group your-resource-group --query id -o tsv)
+   
+   # Assign to App Service
+   az webapp identity assign --resource-group your-resource-group --name your-app-name --identities $IDENTITY_ID
+   
+   # Or for Function App
+   az functionapp identity assign --resource-group your-resource-group --name your-function-name --identities $IDENTITY_ID
+   ```
+
+2. Ensure Key Vault access is granted to the SeedExchangeServiceIdentity (if not already done):
+   ```bash
+   IDENTITY_OBJECT_ID=$(az identity show --name SeedExchangeServiceIdentity --resource-group your-resource-group --query principalId -o tsv)
+   az keyvault set-policy --name your-keyvault --object-id $IDENTITY_OBJECT_ID --secret-permissions get
    ```
 
 3. Configure application settings:
