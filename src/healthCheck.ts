@@ -216,9 +216,9 @@ export async function performHealthCheck(
     const collectionsToUse = collections || await initializeCollections();
     
     // Check Cosmos DB connectivity if using Cosmos DB
-    const hasCosmosEndpoint = !!process.env.COSMOS_DB_ENDPOINT;
-    const hasKeyVault = !!process.env.AZURE_KEY_VAULT_URI;
-    const hasEnvKey = !!process.env.COSMOS_DB_KEY;
+    const hasCosmosEndpoint = process.env.COSMOS_DB_ENDPOINT;
+    const hasKeyVault = process.env.AZURE_KEY_VAULT_URI;
+    const hasEnvKey = process.env.COSMOS_DB_KEY;
     const hasCosmosConfig = hasCosmosEndpoint && (hasKeyVault || hasEnvKey);
     
     if (hasCosmosConfig) {
