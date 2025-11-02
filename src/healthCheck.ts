@@ -2,6 +2,8 @@ import { ISeedExchangeCollections } from './ISeedExchangeCollections';
 import { initializeCollections } from './collectionsFactory';
 import { v4 as uuidv4 } from 'uuid';
 import { SeedExchange } from './types';
+import { CosmosClient } from '@azure/cosmos';
+import { getCosmosDbConfig } from './cosmosDbConfig';
 
 /**
  * Status of a health check component
@@ -27,6 +29,67 @@ export interface HealthCheckResult {
   timestamp: Date;
   dependencies: DependencyHealth[];
   version?: string;
+}
+
+/**
+ * Check Cosmos DB connectivity by retrieving the readme document
+ * Database: SeedExchange, Collection: SeedExchange, Item: readme
+ */
+async function checkCosmosDbConnectivity(): Promise<DependencyHealth> {
+  const startTime = Date.now();
+  
+  try {
+    const config = await getCosmosDbConfig();
+    const client = new CosmosClient({
+      endpoint: config.endpoint,
+      key: config.key
+    });
+
+    // Try to retrieve the readme document from the SeedExchange collection
+    const database = client.database('SeedExchange');
+    const container = database.container('SeedExchange');
+    
+    // Attempt to read the readme item
+    const { resource } = await container.item('readme', 'readme').read();
+    
+    const responseTime = Date.now() - startTime;
+    
+    if (resource) {
+      return {
+        name: 'cosmos-db',
+        status: 'healthy',
+        message: 'Cosmos DB connectivity confirmed - readme retrieved successfully',
+        responseTime,
+        details: {
+          database: 'SeedExchange',
+          collection: 'SeedExchange',
+          itemId: 'readme'
+        }
+      };
+    } else {
+      return {
+        name: 'cosmos-db',
+        status: 'degraded',
+        message: 'Connected to Cosmos DB but readme document not found',
+        responseTime,
+        details: {
+          database: 'SeedExchange',
+          collection: 'SeedExchange',
+          itemId: 'readme'
+        }
+      };
+    }
+  } catch (error) {
+    return {
+      name: 'cosmos-db',
+      status: 'unhealthy',
+      message: error instanceof Error ? error.message : 'Failed to connect to Cosmos DB',
+      responseTime: Date.now() - startTime,
+      details: {
+        error: error instanceof Error ? error.stack : String(error)
+      }
+    };
+  }
 }
 
 /**
@@ -142,6 +205,17 @@ export async function performHealthCheck(
   try {
     // Initialize collections if not provided
     const collectionsToUse = collections || await initializeCollections();
+    
+    // Check Cosmos DB connectivity if using Cosmos DB
+    const hasCosmosEndpoint = process.env.COSMOS_DB_ENDPOINT;
+    const hasKeyVault = process.env.AZURE_KEY_VAULT_URI;
+    const hasEnvKey = process.env.COSMOS_DB_KEY;
+    const hasCosmosConfig = hasCosmosEndpoint && (hasKeyVault || hasEnvKey);
+    
+    if (hasCosmosConfig) {
+      const cosmosDbHealth = await checkCosmosDbConnectivity();
+      dependencies.push(cosmosDbHealth);
+    }
     
     // Check storage health
     const storageHealth = await checkStorageHealth(collectionsToUse);

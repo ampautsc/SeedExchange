@@ -210,4 +210,32 @@ describe('Health Check', () => {
       process.env.COSMOS_DB_ENDPOINT = originalEnv;
     });
   });
+
+  describe('Cosmos DB connectivity check', () => {
+    it('should not include cosmos-db check when not using Cosmos DB', async () => {
+      const result = await performHealthCheck(collections);
+
+      const cosmosDbDep = result.dependencies.find(d => d.name === 'cosmos-db');
+      expect(cosmosDbDep).toBeUndefined();
+    });
+
+    it('should not include cosmos-db check when only endpoint is set', async () => {
+      const originalEndpoint = process.env.COSMOS_DB_ENDPOINT;
+      const originalKey = process.env.COSMOS_DB_KEY;
+      const originalKeyVault = process.env.AZURE_KEY_VAULT_URI;
+      
+      process.env.COSMOS_DB_ENDPOINT = 'https://test.documents.azure.com:443/';
+      delete process.env.COSMOS_DB_KEY;
+      delete process.env.AZURE_KEY_VAULT_URI;
+
+      const result = await performHealthCheck(collections);
+
+      const cosmosDbDep = result.dependencies.find(d => d.name === 'cosmos-db');
+      expect(cosmosDbDep).toBeUndefined();
+
+      process.env.COSMOS_DB_ENDPOINT = originalEndpoint;
+      process.env.COSMOS_DB_KEY = originalKey;
+      process.env.AZURE_KEY_VAULT_URI = originalKeyVault;
+    });
+  });
 });
