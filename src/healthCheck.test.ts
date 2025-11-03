@@ -198,28 +198,37 @@ describe('Health Check', () => {
   describe('Integration with different storage backends', () => {
     it('should detect CosmosDB when environment variable is set', async () => {
       const originalEnv = process.env.COSMOS_DB_ENDPOINT;
-      process.env.COSMOS_DB_ENDPOINT = 'https://test.documents.azure.com:443/';
+      
+      try {
+        process.env.COSMOS_DB_ENDPOINT = 'https://test.documents.azure.com:443/';
 
-      const result = await performHealthCheck(collections);
+        const result = await performHealthCheck(collections);
 
-      const storageDep = result.dependencies.find(d => d.name === 'storage');
-      // Even though we're using in-memory collections in the test,
-      // the environment variable check should indicate CosmosDB
-      expect(storageDep?.message).toContain('storage is functioning correctly');
-
-      process.env.COSMOS_DB_ENDPOINT = originalEnv;
+        const storageDep = result.dependencies.find(d => d.name === 'storage');
+        // Even though we're using in-memory collections in the test,
+        // the environment variable check should indicate CosmosDB
+        expect(storageDep?.message).toContain('storage is functioning correctly');
+      } finally {
+        if (originalEnv !== undefined) {
+          process.env.COSMOS_DB_ENDPOINT = originalEnv;
+        } else {
+          delete process.env.COSMOS_DB_ENDPOINT;
+        }
+      }
     });
   });
 
   describe('Cosmos DB connectivity check', () => {
-    it('should not include cosmos-db check when not using Cosmos DB', async () => {
+    it('should not include cosmos-db checks when not using Cosmos DB', async () => {
       const result = await performHealthCheck(collections);
 
       const cosmosDbDep = result.dependencies.find(d => d.name === 'cosmos-db');
+      const cosmosConfigDep = result.dependencies.find(d => d.name === 'cosmos-db-config');
       expect(cosmosDbDep).toBeUndefined();
+      expect(cosmosConfigDep).toBeUndefined();
     });
 
-    it('should not include cosmos-db check when only endpoint is set', async () => {
+    it('should validate configuration when only endpoint is set', async () => {
       const originalEndpoint = process.env.COSMOS_DB_ENDPOINT;
       const originalKey = process.env.COSMOS_DB_KEY;
       const originalKeyVault = process.env.AZURE_KEY_VAULT_URI;
@@ -231,6 +240,13 @@ describe('Health Check', () => {
 
         const result = await performHealthCheck(collections);
 
+        const cosmosConfigDep = result.dependencies.find(d => d.name === 'cosmos-db-config');
+        expect(cosmosConfigDep).toBeDefined();
+        expect(cosmosConfigDep?.status).toBe('unhealthy');
+        expect(cosmosConfigDep?.message).toContain('Missing required Cosmos DB configuration');
+        expect(cosmosConfigDep?.details?.missingVariables).toContain('COSMOS_DB_KEY or AZURE_KEY_VAULT_URI');
+        
+        // Should not attempt connectivity check with incomplete config
         const cosmosDbDep = result.dependencies.find(d => d.name === 'cosmos-db');
         expect(cosmosDbDep).toBeUndefined();
       } finally {
@@ -248,5 +264,41 @@ describe('Health Check', () => {
         }
       }
     });
+
+    it('should show healthy config when Key Vault URI is set', async () => {
+      const originalEndpoint = process.env.COSMOS_DB_ENDPOINT;
+      const originalKeyVault = process.env.AZURE_KEY_VAULT_URI;
+      const originalKey = process.env.COSMOS_DB_KEY;
+      
+      try {
+        process.env.COSMOS_DB_ENDPOINT = 'https://test.documents.azure.com:443/';
+        process.env.AZURE_KEY_VAULT_URI = 'https://test.vault.azure.net/';
+        delete process.env.COSMOS_DB_KEY;
+
+        const result = await performHealthCheck(collections);
+
+        const cosmosConfigDep = result.dependencies.find(d => d.name === 'cosmos-db-config');
+        expect(cosmosConfigDep).toBeDefined();
+        expect(cosmosConfigDep?.status).toBe('healthy');
+        expect(cosmosConfigDep?.message).toContain('Cosmos DB configuration is complete');
+        expect(cosmosConfigDep?.details?.configuredVariables).toContain('COSMOS_DB_ENDPOINT');
+        expect(cosmosConfigDep?.details?.configuredVariables).toContain('AZURE_KEY_VAULT_URI');
+      } finally {
+        // Restore environment variables
+        if (originalEndpoint !== undefined) {
+          process.env.COSMOS_DB_ENDPOINT = originalEndpoint;
+        } else {
+          delete process.env.COSMOS_DB_ENDPOINT;
+        }
+        if (originalKeyVault !== undefined) {
+          process.env.AZURE_KEY_VAULT_URI = originalKeyVault;
+        } else {
+          delete process.env.AZURE_KEY_VAULT_URI;
+        }
+        if (originalKey !== undefined) {
+          process.env.COSMOS_DB_KEY = originalKey;
+        }
+      }
+    }, 60000);
   });
 });

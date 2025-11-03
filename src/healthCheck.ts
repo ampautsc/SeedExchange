@@ -41,6 +41,65 @@ const README_ITEM_ID = 'readme';
 const README_PARTITION_KEY = 'readme';
 
 /**
+ * Check Cosmos DB configuration to ensure required environment variables are set
+ */
+function checkCosmosDbConfiguration(): DependencyHealth {
+  const startTime = Date.now();
+  
+  const hasEndpoint = !!process.env.COSMOS_DB_ENDPOINT;
+  const hasKeyVault = !!process.env.AZURE_KEY_VAULT_URI;
+  const hasEnvKey = !!process.env.COSMOS_DB_KEY;
+  
+  const missingVars: string[] = [];
+  const configuredVars: string[] = [];
+  
+  if (!hasEndpoint) {
+    missingVars.push('COSMOS_DB_ENDPOINT');
+  } else {
+    configuredVars.push('COSMOS_DB_ENDPOINT');
+  }
+  
+  // Need either Key Vault or environment key
+  if (!hasKeyVault && !hasEnvKey) {
+    missingVars.push('COSMOS_DB_KEY or AZURE_KEY_VAULT_URI');
+  } else {
+    if (hasKeyVault) {
+      configuredVars.push('AZURE_KEY_VAULT_URI');
+    }
+    if (hasEnvKey) {
+      configuredVars.push('COSMOS_DB_KEY');
+    }
+  }
+  
+  const responseTime = Date.now() - startTime;
+  
+  if (missingVars.length > 0) {
+    return {
+      name: 'cosmos-db-config',
+      status: 'unhealthy',
+      message: `Missing required Cosmos DB configuration: ${missingVars.join(', ')}`,
+      responseTime,
+      details: {
+        missingVariables: missingVars,
+        configuredVariables: configuredVars,
+        required: ['COSMOS_DB_ENDPOINT', 'COSMOS_DB_KEY or AZURE_KEY_VAULT_URI']
+      }
+    };
+  }
+  
+  return {
+    name: 'cosmos-db-config',
+    status: 'healthy',
+    message: 'Cosmos DB configuration is complete',
+    responseTime,
+    details: {
+      configuredVariables: configuredVars,
+      endpoint: process.env.COSMOS_DB_ENDPOINT
+    }
+  };
+}
+
+/**
  * Check Cosmos DB connectivity by retrieving the readme document
  * Database: SeedExchange, Collection: SeedExchange, Item: readme
  */
@@ -215,15 +274,24 @@ export async function performHealthCheck(
     // Initialize collections if not provided
     const collectionsToUse = collections || await initializeCollections();
     
-    // Check Cosmos DB connectivity if using Cosmos DB
+    // Check Cosmos DB configuration
     const hasCosmosEndpoint = process.env.COSMOS_DB_ENDPOINT;
     const hasKeyVault = process.env.AZURE_KEY_VAULT_URI;
     const hasEnvKey = process.env.COSMOS_DB_KEY;
+    const hasAnyCosmosVar = hasCosmosEndpoint || hasKeyVault || hasEnvKey;
     const hasCosmosConfig = hasCosmosEndpoint && (hasKeyVault || hasEnvKey);
     
-    if (hasCosmosConfig) {
-      const cosmosDbHealth = await checkCosmosDbConnectivity();
-      dependencies.push(cosmosDbHealth);
+    // Check Cosmos DB configuration if any Cosmos DB variables are set
+    // This validates that all required variables are present when Cosmos DB is being used
+    if (hasAnyCosmosVar) {
+      const configHealth = checkCosmosDbConfiguration();
+      dependencies.push(configHealth);
+      
+      // Only check connectivity if configuration is complete
+      if (hasCosmosConfig) {
+        const cosmosDbHealth = await checkCosmosDbConnectivity();
+        dependencies.push(cosmosDbHealth);
+      }
     }
     
     // Check storage health
