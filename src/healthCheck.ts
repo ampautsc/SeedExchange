@@ -103,12 +103,30 @@ function checkCosmosDbConfiguration(): DependencyHealth {
 
 /**
  * Check Azure Key Vault connectivity and ability to retrieve secrets
- * Note: This function should only be called when AZURE_KEY_VAULT_URI is configured
  */
 async function checkKeyVaultConnectivity(): Promise<DependencyHealth> {
   const startTime = Date.now();
-  const keyVaultUri = process.env.AZURE_KEY_VAULT_URI!; // Non-null assertion OK since we check before calling
+  const keyVaultUri = process.env.AZURE_KEY_VAULT_URI;
   const keySecretName = process.env.COSMOS_DB_KEY_SECRET_NAME || 'CosmosDbKey';
+  
+  // Check if Key Vault URI is configured
+  if (!keyVaultUri) {
+    return {
+      name: 'key-vault',
+      status: 'unhealthy',
+      message: 'Key Vault URI not configured',
+      responseTime: Date.now() - startTime,
+      details: {
+        configured: false,
+        error: 'AZURE_KEY_VAULT_URI environment variable is not set',
+        troubleshooting: [
+          'Set AZURE_KEY_VAULT_URI environment variable',
+          'Example: https://your-keyvault.vault.azure.net/',
+          'See .env.example for configuration guidance'
+        ]
+      }
+    };
+  }
   
   try {
     const credential = new DefaultAzureCredential();
@@ -445,32 +463,20 @@ export async function performHealthCheck(
     // Initialize collections if not provided
     const collectionsToUse = collections || await initializeCollections();
     
-    // Check Cosmos DB configuration
-    const hasCosmosEndpoint = !!process.env.COSMOS_DB_ENDPOINT;
-    const hasKeyVault = !!process.env.AZURE_KEY_VAULT_URI;
-    const hasEnvKey = !!process.env.COSMOS_DB_KEY;
-    const hasAnyCosmosVar = hasCosmosEndpoint || hasKeyVault || hasEnvKey;
-    const hasCosmosConfig = hasCosmosEndpoint && (hasKeyVault || hasEnvKey);
+    // Always check Cosmos DB configuration
+    // This validates that all required variables are present
+    const configHealth = checkCosmosDbConfiguration();
+    dependencies.push(configHealth);
     
-    // Check Cosmos DB configuration if any Cosmos DB variables are set
-    // This validates that all required variables are present when Cosmos DB is being used
-    if (hasAnyCosmosVar) {
-      const configHealth = checkCosmosDbConfiguration();
-      dependencies.push(configHealth);
-      
-      // Check Key Vault connectivity if it's configured
-      // Key Vault is checked separately as it's a distinct dependency
-      if (hasKeyVault) {
-        const keyVaultHealth = await checkKeyVaultConnectivity();
-        dependencies.push(keyVaultHealth);
-      }
-      
-      // Only check Cosmos DB connectivity if configuration is complete
-      if (hasCosmosConfig) {
-        const cosmosDbHealth = await checkCosmosDbConnectivity();
-        dependencies.push(cosmosDbHealth);
-      }
-    }
+    // Always check Key Vault connectivity
+    // This verifies the keystore is accessible and functioning
+    const keyVaultHealth = await checkKeyVaultConnectivity();
+    dependencies.push(keyVaultHealth);
+    
+    // Always check Cosmos DB connectivity
+    // This ensures the database is reachable and operational
+    const cosmosDbHealth = await checkCosmosDbConnectivity();
+    dependencies.push(cosmosDbHealth);
     
     // Check storage health
     const storageHealth = await checkStorageHealth(collectionsToUse);
