@@ -11,6 +11,8 @@ describe('Collections Factory', () => {
     process.env = { ...originalEnv };
     delete process.env.COSMOS_DB_ENDPOINT;
     delete process.env.COSMOS_DB_KEY;
+    delete process.env.AZURE_KEY_VAULT_URI;
+    delete process.env.COSMOS_DB_KEY_SECRET_NAME;
     
     // Suppress console output during tests
     console.log = jest.fn();
