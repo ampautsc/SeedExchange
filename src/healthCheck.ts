@@ -103,25 +103,12 @@ function checkCosmosDbConfiguration(): DependencyHealth {
 
 /**
  * Check Azure Key Vault connectivity and ability to retrieve secrets
+ * Note: This function should only be called when AZURE_KEY_VAULT_URI is configured
  */
 async function checkKeyVaultConnectivity(): Promise<DependencyHealth> {
   const startTime = Date.now();
-  const keyVaultUri = process.env.AZURE_KEY_VAULT_URI;
+  const keyVaultUri = process.env.AZURE_KEY_VAULT_URI!; // Non-null assertion OK since we check before calling
   const keySecretName = process.env.COSMOS_DB_KEY_SECRET_NAME || 'CosmosDbKey';
-  
-  if (!keyVaultUri) {
-    // Key Vault is not configured - this is okay, as COSMOS_DB_KEY can be used instead
-    return {
-      name: 'key-vault',
-      status: 'healthy',
-      message: 'Key Vault not configured (using environment variable for Cosmos DB key)',
-      responseTime: Date.now() - startTime,
-      details: {
-        configured: false,
-        reason: 'AZURE_KEY_VAULT_URI not set'
-      }
-    };
-  }
   
   try {
     const credential = new DefaultAzureCredential();
@@ -182,7 +169,7 @@ async function checkKeyVaultConnectivity(): Promise<DependencyHealth> {
     };
     
     // Only include stack trace in development environments
-    if (errorStack && process.env.NODE_ENV !== 'production') {
+    if (errorStack && process.env.NODE_ENV?.toLowerCase() !== 'production') {
       errorDetails.errorStack = errorStack;
     }
     
@@ -292,7 +279,7 @@ async function checkCosmosDbConnectivity(): Promise<DependencyHealth> {
     };
     
     // Only include stack trace in development environments
-    if (errorStack && process.env.NODE_ENV !== 'production') {
+    if (errorStack && process.env.NODE_ENV?.toLowerCase() !== 'production') {
       errorDetails.errorStack = errorStack;
     }
     
