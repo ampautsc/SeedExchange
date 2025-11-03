@@ -181,7 +181,8 @@ async function checkKeyVaultConnectivity(): Promise<DependencyHealth> {
       errorType: error instanceof Error ? error.constructor.name : typeof error
     };
     
-    if (errorStack) {
+    // Only include stack trace in development environments
+    if (errorStack && process.env.NODE_ENV !== 'production') {
       errorDetails.errorStack = errorStack;
     }
     
@@ -290,7 +291,8 @@ async function checkCosmosDbConnectivity(): Promise<DependencyHealth> {
       errorType: error instanceof Error ? error.constructor.name : typeof error
     };
     
-    if (errorStack) {
+    // Only include stack trace in development environments
+    if (errorStack && process.env.NODE_ENV !== 'production') {
       errorDetails.errorStack = errorStack;
     }
     
@@ -457,9 +459,9 @@ export async function performHealthCheck(
     const collectionsToUse = collections || await initializeCollections();
     
     // Check Cosmos DB configuration
-    const hasCosmosEndpoint = process.env.COSMOS_DB_ENDPOINT;
-    const hasKeyVault = process.env.AZURE_KEY_VAULT_URI;
-    const hasEnvKey = process.env.COSMOS_DB_KEY;
+    const hasCosmosEndpoint = !!process.env.COSMOS_DB_ENDPOINT;
+    const hasKeyVault = !!process.env.AZURE_KEY_VAULT_URI;
+    const hasEnvKey = !!process.env.COSMOS_DB_KEY;
     const hasAnyCosmosVar = hasCosmosEndpoint || hasKeyVault || hasEnvKey;
     const hasCosmosConfig = hasCosmosEndpoint && (hasKeyVault || hasEnvKey);
     
