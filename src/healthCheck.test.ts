@@ -60,22 +60,40 @@ describe('Health Check', () => {
   });
 
   describe('performHealthCheck', () => {
-    it('should return healthy status when storage is working', async () => {
+    it('should return unhealthy status when Cosmos DB and Key Vault are not configured', async () => {
       const result = await performHealthCheck(collections);
 
-      expect(result.status).toBe('healthy');
+      // Overall status should be unhealthy because config checks fail
+      expect(result.status).toBe('unhealthy');
       expect(result.timestamp).toBeInstanceOf(Date);
-      expect(result.dependencies).toHaveLength(1);
-      expect(result.dependencies[0].name).toBe('storage');
-      expect(result.dependencies[0].status).toBe('healthy');
+      
+      // Should have all 4 checks: cosmos-db-config, key-vault, cosmos-db, storage
+      expect(result.dependencies).toHaveLength(4);
+      
+      // Storage should be healthy
+      const storageDep = result.dependencies.find(d => d.name === 'storage');
+      expect(storageDep).toBeDefined();
+      expect(storageDep?.status).toBe('healthy');
+      
+      // Config checks should be unhealthy
+      const cosmosConfigDep = result.dependencies.find(d => d.name === 'cosmos-db-config');
+      expect(cosmosConfigDep?.status).toBe('unhealthy');
+      
+      const keyVaultDep = result.dependencies.find(d => d.name === 'key-vault');
+      expect(keyVaultDep?.status).toBe('unhealthy');
+      
+      const cosmosDbDep = result.dependencies.find(d => d.name === 'cosmos-db');
+      expect(cosmosDbDep?.status).toBe('unhealthy');
     });
 
     it('should verify all CRUD operations', async () => {
       const result = await performHealthCheck(collections);
 
-      expect(result.status).toBe('healthy');
+      // Overall status is unhealthy due to missing config, but storage should be healthy
+      expect(result.status).toBe('unhealthy');
       const storageDep = result.dependencies.find(d => d.name === 'storage');
       expect(storageDep).toBeDefined();
+      expect(storageDep?.status).toBe('healthy');
       expect(storageDep?.details?.operationsVerified).toEqual(['create', 'read', 'query', 'delete']);
     });
 
@@ -122,13 +140,16 @@ describe('Health Check', () => {
   });
 
   describe('formatHealthCheckResult', () => {
-    it('should format healthy result correctly', async () => {
+    it('should format unhealthy result correctly when config is missing', async () => {
       const result = await performHealthCheck(collections);
       const formatted = formatHealthCheckResult(result);
 
-      expect(formatted).toContain('Overall Status: HEALTHY');
-      expect(formatted).toContain('✅');
+      expect(formatted).toContain('Overall Status: UNHEALTHY');
+      expect(formatted).toContain('❌');
       expect(formatted).toContain('storage: healthy');
+      expect(formatted).toContain('cosmos-db-config: unhealthy');
+      expect(formatted).toContain('key-vault: unhealthy');
+      expect(formatted).toContain('cosmos-db: unhealthy');
       expect(formatted).toContain('Dependencies:');
     });
 
@@ -254,13 +275,18 @@ describe('Health Check', () => {
   });
 
   describe('Cosmos DB connectivity check', () => {
-    it('should not include cosmos-db checks when not using Cosmos DB', async () => {
+    it('should always include cosmos-db checks even when not using Cosmos DB', async () => {
       const result = await performHealthCheck(collections);
 
+      // All checks should now always run
       const cosmosDbDep = result.dependencies.find(d => d.name === 'cosmos-db');
       const cosmosConfigDep = result.dependencies.find(d => d.name === 'cosmos-db-config');
-      expect(cosmosDbDep).toBeUndefined();
-      expect(cosmosConfigDep).toBeUndefined();
+      expect(cosmosDbDep).toBeDefined();
+      expect(cosmosConfigDep).toBeDefined();
+      
+      // They should be unhealthy when config is missing
+      expect(cosmosConfigDep?.status).toBe('unhealthy');
+      expect(cosmosDbDep?.status).toBe('unhealthy');
     });
 
     it('should validate configuration when only endpoint is set', async () => {
@@ -275,9 +301,10 @@ describe('Health Check', () => {
       expect(cosmosConfigDep?.message).toContain('Missing required Cosmos DB configuration');
       expect(cosmosConfigDep?.details?.missingVariables).toContain('COSMOS_DB_KEY or AZURE_KEY_VAULT_URI');
       
-      // Should not attempt connectivity check with incomplete config
+      // Connectivity check should now always run and fail when config is incomplete
       const cosmosDbDep = result.dependencies.find(d => d.name === 'cosmos-db');
-      expect(cosmosDbDep).toBeUndefined();
+      expect(cosmosDbDep).toBeDefined();
+      expect(cosmosDbDep?.status).toBe('unhealthy');
     });
 
     it('should show healthy config when Key Vault URI is set', async () => {
@@ -296,11 +323,13 @@ describe('Health Check', () => {
   });
 
   describe('Key Vault connectivity check', () => {
-    it('should not include key-vault check when not configured', async () => {
+    it('should always include key-vault check even when not configured', async () => {
       const result = await performHealthCheck(collections);
 
       const keyVaultDep = result.dependencies.find(d => d.name === 'key-vault');
-      expect(keyVaultDep).toBeUndefined();
+      expect(keyVaultDep).toBeDefined();
+      expect(keyVaultDep?.status).toBe('unhealthy');
+      expect(keyVaultDep?.message).toContain('Key Vault URI not configured');
     });
 
     it('should check Key Vault when AZURE_KEY_VAULT_URI is set', async () => {
