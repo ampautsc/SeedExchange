@@ -30,15 +30,29 @@ jobs:
       id: set-url
       run: |
         if [ -n "${{ github.event.inputs.service_url }}" ]; then
-          echo "SERVICE_URL=${{ github.event.inputs.service_url }}" >> $GITHUB_ENV
-          echo "ENDPOINT_PATH=${{ github.event.inputs.endpoint_path }}" >> $GITHUB_ENV
+          SERVICE_URL="${{ github.event.inputs.service_url }}"
+          ENDPOINT_PATH="${{ github.event.inputs.endpoint_path }}"
         elif [ -n "${{ vars.SERVICE_URL }}" ]; then
-          echo "SERVICE_URL=${{ vars.SERVICE_URL }}" >> $GITHUB_ENV
-          echo "ENDPOINT_PATH=${{ vars.HEALTH_ENDPOINT_PATH || '/health' }}" >> $GITHUB_ENV
+          SERVICE_URL="${{ vars.SERVICE_URL }}"
+          ENDPOINT_PATH="${{ vars.HEALTH_ENDPOINT_PATH }}"
+          if [ -z "$ENDPOINT_PATH" ]; then
+            ENDPOINT_PATH="/health"
+          fi
         else
           echo "No service URL configured. Skipping health check."
           echo "SKIP_CHECK=true" >> $GITHUB_ENV
+          exit 0
         fi
+        
+        # Validate URL format (must be http:// or https://)
+        if [[ ! "$SERVICE_URL" =~ ^https?:// ]]; then
+          echo "Error: SERVICE_URL must start with http:// or https://"
+          echo "Provided URL: $SERVICE_URL"
+          exit 1
+        fi
+        
+        echo "SERVICE_URL=$SERVICE_URL" >> $GITHUB_ENV
+        echo "ENDPOINT_PATH=$ENDPOINT_PATH" >> $GITHUB_ENV
     
     - name: Check service health endpoint
       if: env.SKIP_CHECK != 'true'
@@ -57,12 +71,12 @@ jobs:
           # Display response
           if [ -f response.json ]; then
             echo "Response:"
-            cat response.json | jq '.' || cat response.json
+            jq '.' response.json || cat response.json
           fi
           
           # Check if response contains health status
           if [ -f response.json ]; then
-            STATUS=$(cat response.json | jq -r '.status // empty' 2>/dev/null || echo "")
+            STATUS=$(jq -r '.status // empty' response.json 2>/dev/null || echo "")
             if [ -n "$STATUS" ]; then
               echo "Health Status: $STATUS"
               
