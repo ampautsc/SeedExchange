@@ -2,6 +2,8 @@ import { ISeedExchangeCollections } from './ISeedExchangeCollections';
 import { initializeCollections } from './collectionsFactory';
 import { v4 as uuidv4 } from 'uuid';
 import { SeedExchange } from './types';
+import { CosmosClient } from '@azure/cosmos';
+import { getCosmosDbConfig } from './cosmosDbConfig';
 
 /**
  * Status of a health check component
@@ -27,6 +29,135 @@ export interface HealthCheckResult {
   timestamp: Date;
   dependencies: DependencyHealth[];
   version?: string;
+}
+
+/**
+ * Constants for the Cosmos DB readme document location
+ * The readme is stored in a separate collection from the seed exchanges data
+ */
+const README_DATABASE = 'SeedExchange';
+const README_COLLECTION = 'SeedExchange';
+const README_ITEM_ID = 'readme';
+const README_PARTITION_KEY = 'readme';
+
+/**
+ * Check Cosmos DB configuration to ensure required environment variables are set
+ */
+function checkCosmosDbConfiguration(): DependencyHealth {
+  const startTime = Date.now();
+  
+  const hasEndpoint = !!process.env.COSMOS_DB_ENDPOINT;
+  const hasKeyVault = !!process.env.AZURE_KEY_VAULT_URI;
+  const hasEnvKey = !!process.env.COSMOS_DB_KEY;
+  
+  const missingVars: string[] = [];
+  const configuredVars: string[] = [];
+  
+  if (!hasEndpoint) {
+    missingVars.push('COSMOS_DB_ENDPOINT');
+  } else {
+    configuredVars.push('COSMOS_DB_ENDPOINT');
+  }
+  
+  // Need either Key Vault or environment key
+  if (!hasKeyVault && !hasEnvKey) {
+    missingVars.push('COSMOS_DB_KEY or AZURE_KEY_VAULT_URI');
+  } else {
+    if (hasKeyVault) {
+      configuredVars.push('AZURE_KEY_VAULT_URI');
+    }
+    if (hasEnvKey) {
+      configuredVars.push('COSMOS_DB_KEY');
+    }
+  }
+  
+  const responseTime = Date.now() - startTime;
+  
+  if (missingVars.length > 0) {
+    return {
+      name: 'cosmos-db-config',
+      status: 'unhealthy',
+      message: `Missing required Cosmos DB configuration: ${missingVars.join(', ')}`,
+      responseTime,
+      details: {
+        missingVariables: missingVars,
+        configuredVariables: configuredVars,
+        required: ['COSMOS_DB_ENDPOINT', 'COSMOS_DB_KEY or AZURE_KEY_VAULT_URI']
+      }
+    };
+  }
+  
+  return {
+    name: 'cosmos-db-config',
+    status: 'healthy',
+    message: 'Cosmos DB configuration is complete',
+    responseTime,
+    details: {
+      configuredVariables: configuredVars,
+      endpoint: process.env.COSMOS_DB_ENDPOINT
+    }
+  };
+}
+
+/**
+ * Check Cosmos DB connectivity by retrieving the readme document
+ * Database: SeedExchange, Collection: SeedExchange, Item: readme
+ */
+async function checkCosmosDbConnectivity(): Promise<DependencyHealth> {
+  const startTime = Date.now();
+  
+  try {
+    const config = await getCosmosDbConfig();
+    const client = new CosmosClient({
+      endpoint: config.endpoint,
+      key: config.key
+    });
+
+    // Try to retrieve the readme document from the SeedExchange collection
+    const database = client.database(README_DATABASE);
+    const container = database.container(README_COLLECTION);
+    
+    // Attempt to read the readme item (using partition key for efficient read)
+    const { resource } = await container.item(README_ITEM_ID, README_PARTITION_KEY).read();
+    
+    const responseTime = Date.now() - startTime;
+    
+    if (resource) {
+      return {
+        name: 'cosmos-db',
+        status: 'healthy',
+        message: 'Cosmos DB connectivity confirmed - readme retrieved successfully',
+        responseTime,
+        details: {
+          database: README_DATABASE,
+          collection: README_COLLECTION,
+          itemId: README_ITEM_ID
+        }
+      };
+    } else {
+      return {
+        name: 'cosmos-db',
+        status: 'degraded',
+        message: 'Connected to Cosmos DB but readme document not found',
+        responseTime,
+        details: {
+          database: README_DATABASE,
+          collection: README_COLLECTION,
+          itemId: README_ITEM_ID
+        }
+      };
+    }
+  } catch (error) {
+    return {
+      name: 'cosmos-db',
+      status: 'unhealthy',
+      message: error instanceof Error ? error.message : 'Failed to connect to Cosmos DB',
+      responseTime: Date.now() - startTime,
+      details: {
+        error: error instanceof Error ? error.stack : String(error)
+      }
+    };
+  }
 }
 
 /**
@@ -142,6 +273,26 @@ export async function performHealthCheck(
   try {
     // Initialize collections if not provided
     const collectionsToUse = collections || await initializeCollections();
+    
+    // Check Cosmos DB configuration
+    const hasCosmosEndpoint = process.env.COSMOS_DB_ENDPOINT;
+    const hasKeyVault = process.env.AZURE_KEY_VAULT_URI;
+    const hasEnvKey = process.env.COSMOS_DB_KEY;
+    const hasAnyCosmosVar = hasCosmosEndpoint || hasKeyVault || hasEnvKey;
+    const hasCosmosConfig = hasCosmosEndpoint && (hasKeyVault || hasEnvKey);
+    
+    // Check Cosmos DB configuration if any Cosmos DB variables are set
+    // This validates that all required variables are present when Cosmos DB is being used
+    if (hasAnyCosmosVar) {
+      const configHealth = checkCosmosDbConfiguration();
+      dependencies.push(configHealth);
+      
+      // Only check connectivity if configuration is complete
+      if (hasCosmosConfig) {
+        const cosmosDbHealth = await checkCosmosDbConnectivity();
+        dependencies.push(cosmosDbHealth);
+      }
+    }
     
     // Check storage health
     const storageHealth = await checkStorageHealth(collectionsToUse);
