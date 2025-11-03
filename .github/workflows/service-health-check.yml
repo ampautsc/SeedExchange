@@ -1,0 +1,165 @@
+name: Service Health Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      service_url:
+        description: 'Service URL to check (e.g., https://api.example.com)'
+        required: true
+        type: string
+      endpoint_path:
+        description: 'Health check endpoint path'
+        required: false
+        default: '/health'
+        type: string
+  schedule:
+    # Run service health check daily at 7:00 AM UTC (1 hour after internal health check)
+    - cron: '0 7 * * *'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check-service-health:
+    name: Check Deployed Service Health
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Set service URL
+      id: set-url
+      run: |
+        if [ -n "${{ github.event.inputs.service_url }}" ]; then
+          SERVICE_URL="${{ github.event.inputs.service_url }}"
+          ENDPOINT_PATH="${{ github.event.inputs.endpoint_path }}"
+        elif [ -n "${{ vars.SERVICE_URL }}" ]; then
+          SERVICE_URL="${{ vars.SERVICE_URL }}"
+          ENDPOINT_PATH="${{ vars.HEALTH_ENDPOINT_PATH }}"
+          if [ -z "$ENDPOINT_PATH" ]; then
+            ENDPOINT_PATH="/health"
+          fi
+        else
+          echo "No service URL configured. Skipping health check."
+          echo "SKIP_CHECK=true" >> $GITHUB_ENV
+          exit 0
+        fi
+        
+        # Validate URL format (must be http:// or https://)
+        if [[ ! "$SERVICE_URL" =~ ^https?:// ]]; then
+          echo "Error: SERVICE_URL must start with http:// or https://"
+          echo "Provided URL: $SERVICE_URL"
+          exit 1
+        fi
+        
+        echo "SERVICE_URL=$SERVICE_URL" >> $GITHUB_ENV
+        echo "ENDPOINT_PATH=$ENDPOINT_PATH" >> $GITHUB_ENV
+    
+    - name: Check service health endpoint
+      if: env.SKIP_CHECK != 'true'
+      run: |
+        echo "Checking health endpoint: ${SERVICE_URL}${ENDPOINT_PATH}"
+        
+        # Make HTTP request to health endpoint with timeout
+        HTTP_CODE=$(curl -s -o response.json -w "%{http_code}" --max-time 30 "${SERVICE_URL}${ENDPOINT_PATH}" || echo "000")
+        
+        echo "HTTP Status Code: $HTTP_CODE"
+        
+        # Check if request was successful
+        if [ "$HTTP_CODE" -eq "200" ]; then
+          echo "✅ Health check endpoint returned 200 OK"
+          
+          # Display response
+          if [ -f response.json ]; then
+            echo "Response:"
+            jq '.' response.json || cat response.json
+          fi
+          
+          # Check if response contains health status
+          if [ -f response.json ]; then
+            STATUS=$(jq -r '.status // empty' response.json 2>/dev/null || echo "")
+            if [ -n "$STATUS" ]; then
+              echo "Health Status: $STATUS"
+              
+              if [ "$STATUS" = "healthy" ]; then
+                echo "✅ Service reports healthy status"
+                exit 0
+              elif [ "$STATUS" = "degraded" ]; then
+                echo "⚠️ Service reports degraded status"
+                exit 0
+              elif [ "$STATUS" = "unhealthy" ]; then
+                echo "❌ Service reports unhealthy status"
+                exit 1
+              else
+                echo "⚠️ Unknown health status: $STATUS"
+                exit 0
+              fi
+            fi
+          fi
+          
+          exit 0
+        elif [ "$HTTP_CODE" -eq "000" ]; then
+          echo "❌ Failed to connect to service (timeout or connection error)"
+          exit 1
+        else
+          echo "❌ Health check endpoint returned HTTP $HTTP_CODE"
+          if [ -f response.json ]; then
+            echo "Response:"
+            cat response.json
+          fi
+          exit 1
+        fi
+    
+    - name: Report health check failure
+      if: failure() && env.SKIP_CHECK != 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const serviceUrl = process.env.SERVICE_URL;
+          const endpointPath = process.env.ENDPOINT_PATH;
+          
+          const issueBody = [
+            '## Service Health Check Failure',
+            '',
+            `Service URL: ${serviceUrl}${endpointPath}`,
+            `Time: ${new Date().toISOString()}`,
+            `Workflow Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            '',
+            'The deployed service health check has failed. Please investigate the service status.',
+            '',
+            '### Troubleshooting Steps:',
+            '1. Check if the service is running and accessible',
+            '2. Verify the service URL is correct',
+            '3. Check service logs for errors',
+            '4. Verify network connectivity',
+            '5. Check Azure/cloud provider status'
+          ].join('\n');
+          
+          // Create an issue for the health check failure
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: `Service Health Check Failed - ${new Date().toISOString()}`,
+            body: issueBody,
+            labels: ['bug', 'health-check', 'production']
+          });
+    
+    - name: Summary
+      if: always()
+      run: |
+        echo "# Service Health Check Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "$SKIP_CHECK" = "true" ]; then
+          echo "⏭️ **Status:** Skipped (no service URL configured)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To enable service health checks, configure the \`SERVICE_URL\` repository variable or run manually with a service URL." >> $GITHUB_STEP_SUMMARY
+        else
+          echo "**Service URL:** ${SERVICE_URL}${ENDPOINT_PATH}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ **Status:** Healthy" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Status:** Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+        fi

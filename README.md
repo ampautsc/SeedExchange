@@ -248,16 +248,30 @@ performHealthCheck().then(result => {
 
 **Via GitHub Actions:**
 
-The repository includes a [Health Check workflow](.github/workflows/health-check.yml) that can be:
+The repository includes two health check workflows:
+
+**Internal Health Check** ([health-check.yml](.github/workflows/health-check.yml)):
 - Manually triggered via the Actions tab
 - Scheduled to run daily at 6:00 AM UTC
-- Automatically run when health check code changes
+- Tests health locally within CI/CD environment
+- Does NOT run on code pushes
 
-To manually trigger:
+**Service Health Check** ([service-health-check.yml](.github/workflows/service-health-check.yml)):
+- Makes HTTP requests to deployed service health endpoint
+- Scheduled to run daily at 7:00 AM UTC (if SERVICE_URL configured)
+- Can be manually triggered with service URL
+
+To manually trigger the internal health check:
 1. Go to the Actions tab in GitHub
 2. Select "Health Check" workflow
 3. Click "Run workflow"
 4. Choose environment (in-memory or cosmos-db)
+
+To manually trigger the service health check:
+1. Go to the Actions tab in GitHub
+2. Select "Service Health Check" workflow
+3. Click "Run workflow"
+4. Enter the service URL and endpoint path
 
 ### Health Check Features
 
