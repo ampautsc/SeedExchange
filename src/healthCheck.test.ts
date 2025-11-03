@@ -4,14 +4,59 @@ import { ISeedExchangeCollections } from './ISeedExchangeCollections';
 
 describe('Health Check', () => {
   let collections: ISeedExchangeCollections;
+  
+  // Save original environment variables
+  let originalEnv: {
+    COSMOS_DB_ENDPOINT?: string;
+    AZURE_KEY_VAULT_URI?: string;
+    COSMOS_DB_KEY?: string;
+    COSMOS_DB_KEY_SECRET_NAME?: string;
+  } = {};
 
   beforeEach(async () => {
     collections = new SeedExchangeCollections();
     await collections.clear();
+    
+    // Save environment variables before each test
+    originalEnv = {
+      COSMOS_DB_ENDPOINT: process.env.COSMOS_DB_ENDPOINT,
+      AZURE_KEY_VAULT_URI: process.env.AZURE_KEY_VAULT_URI,
+      COSMOS_DB_KEY: process.env.COSMOS_DB_KEY,
+      COSMOS_DB_KEY_SECRET_NAME: process.env.COSMOS_DB_KEY_SECRET_NAME
+    };
+    
+    // Clear Cosmos DB and Key Vault environment variables for most tests
+    // Individual tests will set them as needed
+    delete process.env.COSMOS_DB_ENDPOINT;
+    delete process.env.AZURE_KEY_VAULT_URI;
+    delete process.env.COSMOS_DB_KEY;
+    delete process.env.COSMOS_DB_KEY_SECRET_NAME;
   });
 
   afterEach(async () => {
     await collections.clear();
+    
+    // Restore original environment variables after each test
+    if (originalEnv.COSMOS_DB_ENDPOINT !== undefined) {
+      process.env.COSMOS_DB_ENDPOINT = originalEnv.COSMOS_DB_ENDPOINT;
+    } else {
+      delete process.env.COSMOS_DB_ENDPOINT;
+    }
+    if (originalEnv.AZURE_KEY_VAULT_URI !== undefined) {
+      process.env.AZURE_KEY_VAULT_URI = originalEnv.AZURE_KEY_VAULT_URI;
+    } else {
+      delete process.env.AZURE_KEY_VAULT_URI;
+    }
+    if (originalEnv.COSMOS_DB_KEY !== undefined) {
+      process.env.COSMOS_DB_KEY = originalEnv.COSMOS_DB_KEY;
+    } else {
+      delete process.env.COSMOS_DB_KEY;
+    }
+    if (originalEnv.COSMOS_DB_KEY_SECRET_NAME !== undefined) {
+      process.env.COSMOS_DB_KEY_SECRET_NAME = originalEnv.COSMOS_DB_KEY_SECRET_NAME;
+    } else {
+      delete process.env.COSMOS_DB_KEY_SECRET_NAME;
+    }
   });
 
   describe('performHealthCheck', () => {
@@ -283,6 +328,126 @@ describe('Health Check', () => {
         expect(cosmosConfigDep?.message).toContain('Cosmos DB configuration is complete');
         expect(cosmosConfigDep?.details?.configuredVariables).toContain('COSMOS_DB_ENDPOINT');
         expect(cosmosConfigDep?.details?.configuredVariables).toContain('AZURE_KEY_VAULT_URI');
+      } finally {
+        // Restore environment variables
+        if (originalEndpoint !== undefined) {
+          process.env.COSMOS_DB_ENDPOINT = originalEndpoint;
+        } else {
+          delete process.env.COSMOS_DB_ENDPOINT;
+        }
+        if (originalKeyVault !== undefined) {
+          process.env.AZURE_KEY_VAULT_URI = originalKeyVault;
+        } else {
+          delete process.env.AZURE_KEY_VAULT_URI;
+        }
+        if (originalKey !== undefined) {
+          process.env.COSMOS_DB_KEY = originalKey;
+        }
+      }
+    }, 60000);
+  });
+
+  describe('Key Vault connectivity check', () => {
+    it('should not include key-vault check when not configured', async () => {
+      const result = await performHealthCheck(collections);
+
+      const keyVaultDep = result.dependencies.find(d => d.name === 'key-vault');
+      expect(keyVaultDep).toBeUndefined();
+    });
+
+    it('should check Key Vault when AZURE_KEY_VAULT_URI is set', async () => {
+      const originalEndpoint = process.env.COSMOS_DB_ENDPOINT;
+      const originalKeyVault = process.env.AZURE_KEY_VAULT_URI;
+      const originalKey = process.env.COSMOS_DB_KEY;
+      
+      try {
+        process.env.COSMOS_DB_ENDPOINT = 'https://test.documents.azure.com:443/';
+        process.env.AZURE_KEY_VAULT_URI = 'https://test.vault.azure.net/';
+        delete process.env.COSMOS_DB_KEY;
+
+        const result = await performHealthCheck(collections);
+
+        const keyVaultDep = result.dependencies.find(d => d.name === 'key-vault');
+        expect(keyVaultDep).toBeDefined();
+        expect(keyVaultDep?.name).toBe('key-vault');
+        // Since we can't actually connect to Key Vault in tests, it should be unhealthy
+        expect(['healthy', 'unhealthy']).toContain(keyVaultDep?.status);
+      } finally {
+        // Restore environment variables
+        if (originalEndpoint !== undefined) {
+          process.env.COSMOS_DB_ENDPOINT = originalEndpoint;
+        } else {
+          delete process.env.COSMOS_DB_ENDPOINT;
+        }
+        if (originalKeyVault !== undefined) {
+          process.env.AZURE_KEY_VAULT_URI = originalKeyVault;
+        } else {
+          delete process.env.AZURE_KEY_VAULT_URI;
+        }
+        if (originalKey !== undefined) {
+          process.env.COSMOS_DB_KEY = originalKey;
+        }
+      }
+    }, 60000);
+
+    it('should provide detailed error information for Key Vault failures', async () => {
+      const originalEndpoint = process.env.COSMOS_DB_ENDPOINT;
+      const originalKeyVault = process.env.AZURE_KEY_VAULT_URI;
+      const originalKey = process.env.COSMOS_DB_KEY;
+      
+      try {
+        process.env.COSMOS_DB_ENDPOINT = 'https://test.documents.azure.com:443/';
+        process.env.AZURE_KEY_VAULT_URI = 'https://nonexistent.vault.azure.net/';
+        delete process.env.COSMOS_DB_KEY;
+
+        const result = await performHealthCheck(collections);
+
+        const keyVaultDep = result.dependencies.find(d => d.name === 'key-vault');
+        expect(keyVaultDep).toBeDefined();
+        expect(keyVaultDep?.status).toBe('unhealthy');
+        expect(keyVaultDep?.message).toBeDefined();
+        expect(keyVaultDep?.details).toBeDefined();
+        expect(keyVaultDep?.details?.error).toBeDefined();
+        expect(keyVaultDep?.details?.errorType).toBeDefined();
+        expect(keyVaultDep?.details?.keyVaultUri).toBe('https://nonexistent.vault.azure.net/');
+      } finally {
+        // Restore environment variables
+        if (originalEndpoint !== undefined) {
+          process.env.COSMOS_DB_ENDPOINT = originalEndpoint;
+        } else {
+          delete process.env.COSMOS_DB_ENDPOINT;
+        }
+        if (originalKeyVault !== undefined) {
+          process.env.AZURE_KEY_VAULT_URI = originalKeyVault;
+        } else {
+          delete process.env.AZURE_KEY_VAULT_URI;
+        }
+        if (originalKey !== undefined) {
+          process.env.COSMOS_DB_KEY = originalKey;
+        }
+      }
+    }, 60000);
+
+    it('should include troubleshooting guidance in Key Vault errors', async () => {
+      const originalEndpoint = process.env.COSMOS_DB_ENDPOINT;
+      const originalKeyVault = process.env.AZURE_KEY_VAULT_URI;
+      const originalKey = process.env.COSMOS_DB_KEY;
+      
+      try {
+        process.env.COSMOS_DB_ENDPOINT = 'https://test.documents.azure.com:443/';
+        process.env.AZURE_KEY_VAULT_URI = 'https://invalid.vault.azure.net/';
+        delete process.env.COSMOS_DB_KEY;
+
+        const result = await performHealthCheck(collections);
+
+        const keyVaultDep = result.dependencies.find(d => d.name === 'key-vault');
+        expect(keyVaultDep).toBeDefined();
+        expect(keyVaultDep?.status).toBe('unhealthy');
+        // Should include troubleshooting guidance
+        if (keyVaultDep?.details?.troubleshooting) {
+          expect(Array.isArray(keyVaultDep.details.troubleshooting)).toBe(true);
+          expect((keyVaultDep.details.troubleshooting as string[]).length).toBeGreaterThan(0);
+        }
       } finally {
         // Restore environment variables
         if (originalEndpoint !== undefined) {

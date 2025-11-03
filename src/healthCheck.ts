@@ -4,6 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { SeedExchange } from './types';
 import { CosmosClient } from '@azure/cosmos';
 import { getCosmosDbConfig } from './cosmosDbConfig';
+import { SecretClient } from '@azure/keyvault-secrets';
+import { DefaultAzureCredential } from '@azure/identity';
 
 /**
  * Status of a health check component
@@ -100,6 +102,131 @@ function checkCosmosDbConfiguration(): DependencyHealth {
 }
 
 /**
+ * Check Azure Key Vault connectivity and ability to retrieve secrets
+ */
+async function checkKeyVaultConnectivity(): Promise<DependencyHealth> {
+  const startTime = Date.now();
+  const keyVaultUri = process.env.AZURE_KEY_VAULT_URI;
+  const keySecretName = process.env.COSMOS_DB_KEY_SECRET_NAME || 'CosmosDbKey';
+  
+  if (!keyVaultUri) {
+    // Key Vault is not configured - this is okay, as COSMOS_DB_KEY can be used instead
+    return {
+      name: 'key-vault',
+      status: 'healthy',
+      message: 'Key Vault not configured (using environment variable for Cosmos DB key)',
+      responseTime: Date.now() - startTime,
+      details: {
+        configured: false,
+        reason: 'AZURE_KEY_VAULT_URI not set'
+      }
+    };
+  }
+  
+  try {
+    const credential = new DefaultAzureCredential();
+    const client = new SecretClient(keyVaultUri, credential);
+    
+    // Try to retrieve the Cosmos DB key secret
+    const secret = await client.getSecret(keySecretName);
+    
+    const responseTime = Date.now() - startTime;
+    
+    if (secret.value) {
+      return {
+        name: 'key-vault',
+        status: 'healthy',
+        message: 'Successfully retrieved secret from Key Vault',
+        responseTime,
+        details: {
+          configured: true,
+          keyVaultUri: keyVaultUri,
+          secretName: keySecretName,
+          secretRetrieved: true,
+          secretProperties: {
+            enabled: secret.properties.enabled,
+            expiresOn: secret.properties.expiresOn?.toISOString(),
+            notBefore: secret.properties.notBefore?.toISOString(),
+            updatedOn: secret.properties.updatedOn?.toISOString()
+          }
+        }
+      };
+    } else {
+      return {
+        name: 'key-vault',
+        status: 'unhealthy',
+        message: 'Key Vault secret exists but has no value',
+        responseTime,
+        details: {
+          configured: true,
+          keyVaultUri: keyVaultUri,
+          secretName: keySecretName,
+          secretRetrieved: false,
+          error: 'Secret value is empty or null'
+        }
+      };
+    }
+  } catch (error) {
+    const responseTime = Date.now() - startTime;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    // Provide detailed error information
+    let detailedMessage = 'Failed to connect to Key Vault';
+    const errorDetails: Record<string, unknown> = {
+      configured: true,
+      keyVaultUri: keyVaultUri,
+      secretName: keySecretName,
+      error: errorMessage,
+      errorType: error instanceof Error ? error.constructor.name : typeof error
+    };
+    
+    if (errorStack) {
+      errorDetails.errorStack = errorStack;
+    }
+    
+    // Add specific troubleshooting guidance based on error type
+    if (errorMessage.includes('ENOTFOUND') || errorMessage.includes('getaddrinfo')) {
+      detailedMessage = 'Failed to connect to Key Vault - DNS resolution failed';
+      errorDetails.troubleshooting = [
+        'Verify AZURE_KEY_VAULT_URI is correct',
+        'Check network connectivity to Azure',
+        'Ensure Key Vault exists and is accessible'
+      ];
+    } else if (errorMessage.includes('403') || errorMessage.includes('Forbidden')) {
+      detailedMessage = 'Failed to connect to Key Vault - Access denied';
+      errorDetails.troubleshooting = [
+        'Verify managed identity has "Get" permission on secrets',
+        'Check that SeedExchangeServiceIdentity is properly configured',
+        'Ensure Key Vault access policies are set correctly'
+      ];
+    } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+      detailedMessage = 'Failed to connect to Key Vault - Authentication failed';
+      errorDetails.troubleshooting = [
+        'Verify DefaultAzureCredential is properly configured',
+        'In development: Run "az login" to authenticate',
+        'In production: Verify managed identity is assigned'
+      ];
+    } else if (errorMessage.includes('SecretNotFound') || errorMessage.includes('not found')) {
+      detailedMessage = `Failed to retrieve secret "${keySecretName}" from Key Vault`;
+      errorDetails.troubleshooting = [
+        `Verify secret "${keySecretName}" exists in Key Vault`,
+        'Check secret name spelling and case sensitivity',
+        'Ensure secret is not disabled or expired'
+      ];
+    }
+    
+    return {
+      name: 'key-vault',
+      status: 'unhealthy',
+      message: detailedMessage,
+      responseTime,
+      details: errorDetails
+    };
+  }
+}
+
+/**
  * Check Cosmos DB connectivity by retrieving the readme document
  * Database: SeedExchange, Collection: SeedExchange, Item: readme
  */
@@ -148,14 +275,69 @@ async function checkCosmosDbConnectivity(): Promise<DependencyHealth> {
       };
     }
   } catch (error) {
+    const responseTime = Date.now() - startTime;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    // Provide detailed error information
+    let detailedMessage = 'Failed to connect to Cosmos DB';
+    const errorDetails: Record<string, unknown> = {
+      database: README_DATABASE,
+      collection: README_COLLECTION,
+      itemId: README_ITEM_ID,
+      endpoint: process.env.COSMOS_DB_ENDPOINT,
+      error: errorMessage,
+      errorType: error instanceof Error ? error.constructor.name : typeof error
+    };
+    
+    if (errorStack) {
+      errorDetails.errorStack = errorStack;
+    }
+    
+    // Add specific troubleshooting guidance based on error type
+    if (errorMessage.includes('ENOTFOUND') || errorMessage.includes('getaddrinfo')) {
+      detailedMessage = 'Failed to connect to Cosmos DB - DNS resolution failed';
+      errorDetails.troubleshooting = [
+        'Verify COSMOS_DB_ENDPOINT is correct',
+        'Check network connectivity to Azure',
+        'Ensure Cosmos DB account exists and is accessible'
+      ];
+    } else if (errorMessage.includes('403') || errorMessage.includes('Forbidden')) {
+      detailedMessage = 'Failed to connect to Cosmos DB - Access denied';
+      errorDetails.troubleshooting = [
+        'Verify Cosmos DB key is correct',
+        'Check that the account has not been deleted or moved',
+        'Ensure IP address is allowed in Cosmos DB firewall rules'
+      ];
+    } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+      detailedMessage = 'Failed to connect to Cosmos DB - Authentication failed';
+      errorDetails.troubleshooting = [
+        'Verify COSMOS_DB_KEY is correct and not expired',
+        'Check that Key Vault secret contains valid Cosmos DB key',
+        'Regenerate Cosmos DB key if necessary'
+      ];
+    } else if (errorMessage.includes('NotFound') || errorMessage.includes('ResourceNotFound')) {
+      detailedMessage = 'Failed to connect to Cosmos DB - Database or container not found';
+      errorDetails.troubleshooting = [
+        `Verify database "${README_DATABASE}" exists`,
+        `Verify container "${README_COLLECTION}" exists`,
+        'Check Cosmos DB account configuration'
+      ];
+    } else if (errorMessage.includes('TooManyRequests') || errorMessage.includes('429')) {
+      detailedMessage = 'Failed to connect to Cosmos DB - Rate limit exceeded';
+      errorDetails.troubleshooting = [
+        'Cosmos DB is throttling requests',
+        'Check RU/s allocation for the database',
+        'Consider increasing provisioned throughput'
+      ];
+    }
+    
     return {
       name: 'cosmos-db',
       status: 'unhealthy',
-      message: error instanceof Error ? error.message : 'Failed to connect to Cosmos DB',
-      responseTime: Date.now() - startTime,
-      details: {
-        error: error instanceof Error ? error.stack : String(error)
-      }
+      message: detailedMessage,
+      responseTime,
+      details: errorDetails
     };
   }
 }
@@ -287,7 +469,14 @@ export async function performHealthCheck(
       const configHealth = checkCosmosDbConfiguration();
       dependencies.push(configHealth);
       
-      // Only check connectivity if configuration is complete
+      // Check Key Vault connectivity if it's configured
+      // Key Vault is checked separately as it's a distinct dependency
+      if (hasKeyVault) {
+        const keyVaultHealth = await checkKeyVaultConnectivity();
+        dependencies.push(keyVaultHealth);
+      }
+      
+      // Only check Cosmos DB connectivity if configuration is complete
       if (hasCosmosConfig) {
         const cosmosDbHealth = await checkCosmosDbConnectivity();
         dependencies.push(cosmosDbHealth);
