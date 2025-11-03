@@ -109,11 +109,21 @@ Health checks must:
 
 #### Automated Health Checks
 
-The repository includes a GitHub Action (`.github/workflows/health-check.yml`) that:
+The repository includes two GitHub Actions for health monitoring:
+
+**Internal Health Check** (`.github/workflows/health-check.yml`):
 - Runs automatically on a schedule (daily at 6:00 AM UTC)
 - Can be manually triggered via workflow_dispatch
 - Tests both in-memory and Cosmos DB backends (if configured)
+- Performs health checks locally within the CI/CD environment
+- Does NOT run on code pushes (not part of CI/CD pipeline)
+
+**Service Health Check** (`.github/workflows/service-health-check.yml`):
+- Checks deployed service health by making HTTP requests to the service endpoint
+- Runs automatically on a schedule (daily at 7:00 AM UTC)
+- Can be manually triggered with a service URL
 - Reports failures and creates issues for investigation
+- Requires SERVICE_URL repository variable or manual input
 
 #### Manual Health Checks
 
@@ -154,39 +164,71 @@ performHealthCheck().then(result => {
 
 #### GitHub Action Usage
 
-**Manual Trigger:**
+**Internal Health Check (Local Testing):**
 
+Manual Trigger:
 1. Go to Actions tab in GitHub repository
 2. Select "Health Check" workflow
 3. Click "Run workflow"
 4. Choose environment (in-memory or cosmos-db)
 5. Click "Run workflow" button
 
-**Scheduled Runs:**
+Scheduled Runs:
+- Runs automatically every day at 6:00 AM UTC
+- Does NOT run on code changes (removed from CI/CD pipeline)
 
-The workflow runs automatically every day at 6:00 AM UTC.
+**Service Health Check (Deployed Service):**
 
-**On Code Changes:**
+Manual Trigger:
+1. Go to Actions tab in GitHub repository
+2. Select "Service Health Check" workflow
+3. Click "Run workflow"
+4. Enter service URL (e.g., https://api.example.com)
+5. Enter health endpoint path (default: /health)
+6. Click "Run workflow" button
 
-The workflow runs automatically when changes are made to:
-- `src/healthCheck.ts`
-- `.github/workflows/health-check.yml`
+Scheduled Runs:
+- Runs automatically every day at 7:00 AM UTC (if SERVICE_URL is configured)
+
+Automatic Configuration:
+- Set `SERVICE_URL` repository variable for automatic scheduled checks
+- Optionally set `HEALTH_ENDPOINT_PATH` (defaults to `/health`)
 
 ### 8. Integration with CI/CD
 
-Health checks should be integrated into deployment pipelines:
+The health check workflows are designed to work alongside CI/CD pipelines:
+
+**During Development and Testing:**
+- The standard test suite (`.github/workflows/test.yml`) runs on every push and PR
+- Tests include unit tests for health check functionality
+- Health checks are NOT executed during CI/CD builds
+
+**After Deployment:**
+- Use the Service Health Check workflow to verify deployed service health
+- Configure SERVICE_URL repository variable for automatic monitoring
+- Manual triggers available for ad-hoc health verification
+
+**Example deployment pipeline integration:**
 
 ```yaml
-# Example CI/CD integration
-- name: Run health check
-  run: npm run build && node -e "..."
+# After deploying to production
+- name: Wait for service startup
+  run: sleep 30
   
-- name: Verify health
-  run: |
-    if [ $? -ne 0 ]; then
-      echo "Health check failed, stopping deployment"
-      exit 1
-    fi
+- name: Trigger service health check
+  uses: actions/github-script@v7
+  with:
+    script: |
+      await github.rest.actions.createWorkflowDispatch({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        workflow_id: 'service-health-check.yml',
+        ref: 'main',
+        inputs: {
+          service_url: 'https://your-service.azurewebsites.net',
+          endpoint_path: '/health'
+        }
+      });
 ```
 
 ### 9. Best Practices
@@ -353,5 +395,6 @@ Health checks support compliance requirements by:
 
 - [Health Check Implementation](./src/healthCheck.ts)
 - [Health Check Tests](./src/healthCheck.test.ts)
-- [GitHub Action Workflow](./.github/workflows/health-check.yml)
+- [Internal Health Check Workflow](./.github/workflows/health-check.yml)
+- [Service Health Check Workflow](./.github/workflows/service-health-check.yml)
 - [README - Storage Options](./README.md#storage-options)
